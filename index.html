@@ -12,6 +12,10 @@
     canvas{display:block;width:100%;height:100%}
     #sidebar{width:var(--sidebar-w);background:#0f1720;color:#e6eef6;padding:12px;box-sizing:border-box;overflow:auto}
     h2{margin:4px 0 10px;font-size:16px}
+	 h3 {
+        margin: 4px 0;
+        padding: 0;
+    }
     label{display:block;margin-top:8px;font-size:13px}
     .row{display:flex;gap:8px;align-items:center}
     input[type=range]{width:100%}
@@ -20,7 +24,7 @@
     .info{background:#071624;padding:8px;border-radius:6px;margin-top:8px;font-family:monospace;font-size:13px}
     .controls{margin-top:6px}
     .section{margin-bottom:12px}
-    .select-info{background:#071624;padding:8px;border-radius:6px;margin-top:8px;font-size:13px}
+    .select-info{background:#071624;padding:2px;border-radius:6px;font-size:13px}
     a.download-link{color:#9fe7ff;display:inline-block;margin-top:6px}
     .footer{margin-top:12px;font-size:12px;color:#9fb0c8}
 	.sel-verts{overflow-wrap: anywhere;}
@@ -58,8 +62,27 @@
 	}
 	
 	#mapDropdown {
+	  min-width: 200px;
 	  max-width: 250px;
 	  box-sizing: border-box;
+	}
+	
+	#file {
+		border-radius: 6px;
+		padding-top: 8px;
+		font-family: monospace;
+		font-size: 13px;
+	}
+
+	#file::file-selector-button {
+		background-color: #2564eb; /* button background */
+		color: #fff; /* button text */
+		border: none;
+		border-radius: 4px;
+		padding: 6px 10px;
+		margin-right: 8px;
+		cursor: pointer;
+		transition: background-color 0.2s ease;
 	}
   </style>
 
@@ -84,7 +107,7 @@
       <h2>Banjo Model Viewer</h2>
 
       <div class="section">
-        <div class="muted">Game:</div>
+        <!--<div class="muted">Game:</div>-->
 		<select id="selected-game">
 			<option value="BK">Banjo-Kazooie</option>
 			<option value="BT">Banjo-Tooie</option>
@@ -104,7 +127,7 @@
 
       <div class="section controls">
         <h3>Options</h3>
-        <div class="muted">Control mode:</div>
+        <!--<div class="muted">Control mode:</div>-->
         <select id="control-mode">
           <!--<option value="auto">Auto (try Pointer Lock, fallback to Orbit)</option>-->
           <option value="pointer">Fly Mode (WASD)</option>
@@ -114,16 +137,36 @@
         <label><input id="wireframe" type="checkbox" checked> Draw triangle edges</label>
         <label><input id="backface" type="checkbox"> Double-sided</label>
         <label style="display:none;"><input id="translucent" type="checkbox" checked> Translucent (opacity)</label>
-        <label>Opacity <input id="opacity" type="range" min="0" max="1" step="0.01" value="1.0"></label>
+        <label style="display:none;">Opacity <input id="opacity" type="range" min="0" max="1" step="0.01" value="1.0"></label>
         <label style="display:none;"><input id="grid" type="checkbox"> Draw grid</label>
       </div>
 	  
 	  <div class="section">
-        <h3>Selection</h3>
+        <h3>Selected Triangles</h3>
         <div class="select-info">
-          <div>Selected triangle index: <span id="sel-index">none</span></div>
+          <!--<div>Selected triangle index: <span id="sel-index">none</span></div>
           <div>Vertices:</div>
-          <text id="sel-verts">none</pre>
+          <text id="sel-verts">none</pre>-->
+		  <label><input id="multiSelect" type="checkbox"> Multi-select</label>
+		  <textarea id="selectionListEl"
+			rows="6"
+			cols="40"
+			readonly
+			style="
+				background-color: #1e1e1e;
+				color: #efefef;
+				border: 1px solid #555;
+				border-radius: 6px;
+				padding: 6px;
+				font-family: monospace;
+				font-size: 13px;
+				resize: vertical;
+				width: 100%;
+				box-sizing: border-box;
+				margin-top: 6px;
+				margin-bottom: 8px;
+			">
+			</textarea>
         </div>
       </div>
 
@@ -581,30 +624,41 @@
       else statusEl.style.background = '#221a11';
     }
 
-    function setMaterialProps(){
-      material.transparent = translucentCheckbox.checked;
-      material.opacity = parseFloat(opacitySlider.value);
-      material.side = backfaceCheckbox.checked ? THREE.DoubleSide : THREE.FrontSide;
-      material.needsUpdate = true;
-    }
-	
-    // Grid helper
-    const grid = new THREE.GridHelper(8000,80,'#1c2a3a','#0f1720');
-    grid.material.opacity = 0.25; grid.material.transparent = true;
+    function setMaterialProps() {
+		loadedModels.forEach(m => {
+			if (m.mesh && m.mesh.material) {
+				m.mesh.material.transparent = translucentCheckbox.checked;
+				m.mesh.material.opacity = parseFloat(opacitySlider.value);
+				m.mesh.material.side = backfaceCheckbox.checked
+					? THREE.DoubleSide
+					: THREE.FrontSide;
+				m.mesh.material.needsUpdate = true;
+			}
+		});
+	}
+
+	// Grid helper
+	const grid = new THREE.GridHelper(8000, 80, '#1c2a3a', '#0f1720');
+	grid.material.opacity = 0.25;
+	grid.material.transparent = true;
 	grid.visible = gridCheckbox.checked;
-    scene.add(grid);
+	scene.add(grid);
 
-    translucentCheckbox.addEventListener('change', setMaterialProps);
-    opacitySlider.addEventListener('input', setMaterialProps);
-    backfaceCheckbox.addEventListener('change', setMaterialProps);
+	translucentCheckbox.addEventListener('change', setMaterialProps);
+	opacitySlider.addEventListener('input', setMaterialProps);
+	backfaceCheckbox.addEventListener('change', setMaterialProps);
 
-    wireframeCheckbox.addEventListener('change', ()=>{
-      if(edges) edges.visible = wireframeCheckbox.checked;
-    });
-	
-	gridCheckbox.addEventListener('change', ()=>{
-      if(grid) grid.visible = gridCheckbox.checked;
-    });
+	wireframeCheckbox.addEventListener('change', () => {
+		loadedModels.forEach(m => {
+			if (m.edges) {
+				m.edges.visible = m.mesh.visible && wireframeCheckbox.checked;
+			}
+		});
+	});
+
+	gridCheckbox.addEventListener('change', () => {
+		grid.visible = gridCheckbox.checked;
+	});
 
     // File parsing
     fileInput.addEventListener('change', async (ev)=>{
@@ -629,19 +683,39 @@
 			return null
 	}
 	
-    loadMap.addEventListener('click',(e)=>{
+	function getModelBPointer(game, mapName) {
+		if (game == "BK"){
+			const found = BK_Maps.find(map => map.name === mapName);
+			return found ? found.modelBPointer : null;
+		}
+		else if (game == "BT"){
+			const found = BT_Maps.find(map => map.name === mapName);
+			return found ? found.modelBPointer : null;
+		}
+		else
+			return null
+	}
+	
+    loadMap.addEventListener('click', async (e) => {
 		const game = document.getElementById("selected-game").value;
 		const mapName = document.getElementById("mapDropdown").value;
 		let mapFilename = getModelAPointer(game, mapName);
-		
-		fetch('./' + game + '/' + mapFilename)
-		  .then(res => res.arrayBuffer())
-		  .then(buffer => {
-			console.log("Binary file length:", buffer.byteLength);
-			parseBKModelBinary(buffer); // pass ArrayBuffer directly
-		  })
-		  .catch(err => console.error(err));
-	})
+		let mapFilename2 = getModelBPointer(game, mapName);
+
+		try {
+			const res1 = await fetch('./' + game + '/' + mapFilename);
+			const buffer1 = await res1.arrayBuffer();
+			console.log("Binary file length:", buffer1.byteLength);
+			parseBKModelBinary(buffer1, true);
+
+			const res2 = await fetch('./' + game + '/' + mapFilename2);
+			const buffer2 = await res2.arrayBuffer();
+			console.log("Binary file length:", buffer2.byteLength);
+			parseBKModelBinary(buffer2, false);
+		} catch (err) {
+			console.error(err);
+		}
+	});
 
     // Detect binary vs text simple heuristic
     function parseModel(buffer){
@@ -656,7 +730,7 @@
       if(isText) parseModelText(new TextDecoder().decode(buffer));
       else {
 		if(game == "BK" || game == "BT")
-			parseBKModelBinary(buffer);
+			parseBKModelBinary(buffer, true);
 		else
 			parseModelBinary(buffer);
 	  }
@@ -686,7 +760,7 @@
           for(let i=0;i<tris.length;i++) tris[i]=tris[i].map(x=>x-1);
         }
       }
-      buildGeometry(verts,tris);
+      buildGeometry(verts, tris, `Main Model`, true);
     }
 
     // Binary format: [uint16 vertexCount][uint16 triCount] then vertexCount*(int16 x,y,z) then triCount*(uint16 a,b,c)
@@ -704,7 +778,7 @@
         const z = dv.getInt16(offset,true); offset+=2;
         verts.push([x,y,z]);
       }
-	  console.log(verts)
+	  //console.log(verts)
       const tris = [];
       for(let i=0;i<triCount;i++){
         if(offset+6>dv.byteLength) break;
@@ -713,17 +787,17 @@
         const c = dv.getUint16(offset,true); offset+=2;
         tris.push([a,b,c]);
       }
-	  console.log(tris)
+	  //console.log(tris)
       const allIdx = [].concat(...tris);
       const maxIdx = Math.max(...allIdx);
       const minIdx = Math.min(...allIdx);
       if(minIdx>=1 && maxIdx<=verts.length) {
         for(let i=0;i<tris.length;i++) tris[i]=tris[i].map(x=>x-1);
       }
-      buildGeometry(verts,tris);
+      buildGeometry(verts, tris, `Main Model`, true);
     }
 	
-	function parseBKModelBinary(buffer){
+	function parseBKModelBinary(buffer, fresh){
       const dv = new DataView(buffer);
       if(dv.byteLength<4){ alert('binary too small'); return; }
       let offset = 0;
@@ -775,38 +849,70 @@
       if(minIdx>=1 && maxIdx<=verts.length) {
         for(let i=0;i<tris.length;i++) tris[i]=tris[i].map(x=>x-1);
       }
-      buildGeometry(verts,tris);
+	  if(fresh)
+		buildGeometry(verts, tris, `Main Model`, fresh);
+	  else
+		buildGeometry(verts, tris, `Model ${loadedModels.length+1}`, fresh);
 	}
+	
+	let loadedModels = [];
+	
+    function buildGeometry(verts, tris, name = "Main Model", clearFirst = true) {
+		
+		if ((!verts || !tris || verts.length === 0 || tris.length === 0) && clearFirst) { 
+			alert('No valid vertices or triangles found'); 
+			return; 
+		}
 
-    function buildGeometry(verts,tris){
-      if(!verts || !tris || verts.length===0 || tris.length===0){ alert('No valid vertices or triangles found'); return; }
-      const positions = new Float32Array(verts.length*3);
-      for(let i=0;i<verts.length;i++){ positions[3*i]=verts[i][0]; positions[3*i+1]=verts[i][1]; positions[3*i+2]=verts[i][2]; }
-      const indices = new (verts.length>65535?Uint32Array:Uint16Array)(tris.length*3);
-      for(let i=0;i<tris.length;i++){ indices[3*i]=tris[i][0]; indices[3*i+1]=tris[i][1]; indices[3*i+2]=tris[i][2]; }
+		// Optionally clear all existing models
+		if (clearFirst) {
+			loadedModels.forEach(m => {
+				scene.remove(m.mesh);
+				scene.remove(m.edges);
+			});
+			loadedModels = [];
 
-      const geom = new THREE.BufferGeometry();
-      geom.setAttribute('position', new THREE.BufferAttribute(positions,3));
-      geom.setIndex(new THREE.BufferAttribute(indices,1));
-      //geom.computeVertexNormals();
-      material.flatShading = true;
-	  
-      if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); mesh=null; }
-      if(edges){ scene.remove(edges); edges.geometry.dispose(); edges=null; }
-	  
-	  // Remove any previous selection marker
-	  clearSelection();
-	  
-      mesh = new THREE.Mesh(geom, material);
-		mesh.material.polygonOffset = true;
-		mesh.material.polygonOffsetFactor = 1;   // Push back
-		mesh.material.polygonOffsetUnits = 1;    // In depth units
-      scene.add(mesh);
+			// Remove all model checkboxes
+			removeAllModelCheckboxes();
+			
+			// Clear selection
+			clearSelection();
+		}
 
-      // Create geometry for *all* edges (even if shared and coplanar)
+		// Create vertex positions
+		const positions = new Float32Array(verts.length * 3);
+		for (let i = 0; i < verts.length; i++) {
+			positions[3 * i]     = verts[i][0];
+			positions[3 * i + 1] = verts[i][1];
+			positions[3 * i + 2] = verts[i][2];
+		}
+
+		// Create triangle indices
+		const indices = new (verts.length > 65535 ? Uint32Array : Uint16Array)(tris.length * 3);
+		for (let i = 0; i < tris.length; i++) {
+			indices[3 * i]     = tris[i][0];
+			indices[3 * i + 1] = tris[i][1];
+			indices[3 * i + 2] = tris[i][2];
+		}
+
+		// Build geometry and mesh
+		const geom = new THREE.BufferGeometry();
+		geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		geom.setIndex(new THREE.BufferAttribute(indices, 1));
+		material.flatShading = true;
+
+		const meshObj = new THREE.Mesh(geom, material.clone());
+		meshObj.material.polygonOffset = true;
+		meshObj.material.polygonOffsetFactor = 1;
+		meshObj.material.polygonOffsetUnits = 1;
+		if(!clearFirst)
+			meshObj.material.color.set(0x38d7ff);
+		scene.add(meshObj);
+
+		// Build wireframe edges
 		const edgePositions = [];
 		for (let i = 0; i < indices.length; i += 3) {
-			const a = indices[i], b = indices[i+1], c = indices[i+2];
+			const a = indices[i], b = indices[i + 1], c = indices[i + 2];
 			const va = verts[a], vb = verts[b], vc = verts[c];
 			edgePositions.push(
 				va[0], va[1], va[2], vb[0], vb[1], vb[2],
@@ -814,114 +920,236 @@
 				vc[0], vc[1], vc[2], va[0], va[1], va[2]
 			);
 		}
-
 		const edgeGeom = new THREE.BufferGeometry();
 		edgeGeom.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
-		edges = new THREE.LineSegments(
+		const edgesObj = new THREE.LineSegments(
 			edgeGeom,
 			new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1, opacity: 0.8, transparent: true })
 		);
-      edges.visible = wireframeCheckbox.checked;
-      scene.add(edges);
+		edgesObj.visible = wireframeCheckbox.checked;
+		scene.add(edgesObj);
 
-      const box = new THREE.Box3().setFromBufferAttribute(geom.attributes.position);
-      const sizeVec = new THREE.Vector3();
-      box.getSize(sizeVec);
-      const center = box.getCenter(new THREE.Vector3());
-      const fitDist = Math.max(200, sizeVec.length()*0.8);
-      //camera.position.copy(center).add(new THREE.Vector3(0, fitDist, fitDist*1.2));
-      camera.position.copy(center)
-      pointerControls.getObject().position.copy(camera.position);
-
-      selectedTriangle = null;
-      updateSelectionUI();
-    }
-
-    // Selection
-    let selectedTriangle = null;
-    function updateSelectionUI(){
-      if(selectedTriangle==null){ selIndexEl.textContent='none'; selVertsEl.textContent='none'; return; }
-      selIndexEl.textContent = selectedTriangle.index;
-      const pts = selectedTriangle.verts.map(v=>`${v.x.toFixed(0)} ${v.y.toFixed(0)} ${v.z.toFixed(0)}`);
-      selVertsEl.textContent = pts.join(' ');
-    }
+		// Store and register in UI
+		loadedModels.push({ name, mesh: meshObj, edges: edgesObj });
+		//console.log(loadedModels);
+		addModelCheckbox(name, meshObj, edgesObj, clearFirst);
+	}
 	
+	function removeAllModelCheckboxes() {
+		const section = document.querySelector('.controls');
+		// Remove all containers that hold the model checkbox + color picker
+		section.querySelectorAll('div').forEach(container => {
+			const label = container.querySelector('label');
+			if (label && label.textContent.trim().startsWith('Show ')) {
+				container.remove();
+			}
+		});
+	}
+
+	function addModelCheckbox(name, meshObj, edgesObj, clearFirst) {
+		const section = document.querySelector('.controls');
+
+		// Container
+		const container = document.createElement('div');
+		container.style.display = 'flex';
+		container.style.alignItems = 'center';
+		container.style.marginBottom = '4px';
+		container.style.gap = '8px'; // space between checkbox+label and color picker
+
+		// Visibility checkbox + label
+		const label = document.createElement('label');
+		label.style.display = 'flex';
+		label.style.alignItems = 'center';
+		const chk = document.createElement('input');
+		chk.type = 'checkbox';
+		chk.checked = true;
+		chk.addEventListener('change', () => {
+			meshObj.visible = chk.checked;
+			edgesObj.visible = chk.checked && wireframeCheckbox.checked;
+			clearSelection();
+		});
+		label.appendChild(chk);
+		const labelText = document.createTextNode(` Show ${name}`);
+		label.appendChild(labelText);
+
+		// Color picker
+		const colorInput = document.createElement('input');
+		colorInput.type = 'color';
+		colorInput.value = clearFirst ? '#3aa6ff' : '#38d7ff';
+		colorInput.addEventListener('input', () => {
+			if (meshObj.material) {
+				meshObj.material.color.set(colorInput.value);
+				meshObj.material.needsUpdate = true;
+			}
+		});
+
+		// Assemble
+		container.appendChild(label);
+		container.appendChild(colorInput);
+		section.appendChild(container);
+	}
+	
+    // === Selection state ===
+	// Elements for selection
+	const multiSelectCheckbox = document.getElementById('multiSelect');
+	const selectionListEl = document.getElementById('selectionListEl');
+
+	// Store multiple selections
+	let selectedTriangles = [];
+
+	// Update selection UI
+	function updateSelectionUI() {
+		if (selectedTriangles.length === 0) {
+			selectionListEl.value = '';
+			return;
+		}
+		selectionListEl.value = selectedTriangles.map(sel => {
+			const pts = sel.verts.map(v => `${v.x.toFixed(0)} ${v.y.toFixed(0)} ${v.z.toFixed(0)}`);
+			//return `${sel.index} | ${pts.join(' ')}`;
+			return `${pts.join(' ')}`;
+		}).join('\n');
+	}
+	
+	// Listen for changes to multi-select checkbox
+	multiSelectCheckbox.addEventListener('change', () => {
+		if (!multiSelectCheckbox.checked) {
+			clearSelection(); // clears all yellow triangles & selection info
+		}
+	});
+
 	// Clear selection
 	function clearSelection() {
-		const prevSel = scene.getObjectByName('selectionMarker');
-		if (prevSel) scene.remove(prevSel);
-		selectedTriangle = null;
-	}
+		// Remove all selection markers from the scene
+		selectedTriangles.forEach(sel => {
+			const markerName = `selectionMarker_${sel.modelName}_${sel.index}`;
+			const marker = scene.getObjectByName(markerName);
+			if (marker) {
+				scene.remove(marker);
+				if (marker.geometry) marker.geometry.dispose();
+				if (marker.material) marker.material.dispose();
+			}
+		});
 
-    // Combined canvas click handler: will attempt pointer lock (in pointer mode) or perform selection (if locked or in orbit mode)
-    function performSelection(ev) {
-	  if (!mesh) return;
+		// Empty the selection array
+		selectedTriangles.length = 0;
 
-	  if (document.pointerLockElement === renderer.domElement) {
-		// Pointer lock mode → always cast from center
-		mouse.x = 0;
-		mouse.y = 0;
-	  } else {
-		// Orbit / normal mode → use real mouse position
-		const rect = renderer.domElement.getBoundingClientRect();
-		const x = ev.clientX - rect.left;
-		const y = ev.clientY - rect.top;
-		mouse.x = (x / rect.width) * 2 - 1;
-		mouse.y = - (y / rect.height) * 2 + 1;
-	  }
+		// Clear selection text box
+		selectionListEl.value = '';
 
-	  raycaster.setFromCamera(mouse, camera);
-	  const inter = raycaster.intersectObject(mesh);
-	  if (inter.length === 0) {
-		clearSelection();
+		// Update UI state
 		updateSelectionUI();
-		return;
-	  }
-
-	  const hit = inter[0];
-	  const face = hit.face;
-	  const geom = mesh.geometry;
-	  const pos = geom.attributes.position;
-	  const a = face.a, b = face.b, c = face.c;
-	  const va = new THREE.Vector3().fromBufferAttribute(pos,a);
-	  const vb = new THREE.Vector3().fromBufferAttribute(pos,b);
-	  const vc = new THREE.Vector3().fromBufferAttribute(pos,c);
-	  selectedTriangle = { index: Math.floor(hit.faceIndex), verts:[va,vb,vc] };
-
-	  const prev = scene.getObjectByName('selectionMarker');
-	  if (prev) scene.remove(prev);
-
-	  const selGeom = new THREE.BufferGeometry();
-	  const arr = new Float32Array([
-		va.x,va.y,va.z,
-		vb.x,vb.y,vb.z,
-		vc.x,vc.y,vc.z
-	  ]);
-	  selGeom.setAttribute('position', new THREE.BufferAttribute(arr,3));
-	  selGeom.setIndex([0,1,2]);
-	// original commented out. it had a bug where it wouldn't display the yellow selected triangle at very steep angles
-	//const selMat = new THREE.MeshBasicMaterial({
-	//	color:0xffff66,
-	//	side:THREE.DoubleSide,
-	//	transparent:true,
-	//	opacity:1.0
-	//});
-	  const selMat = new THREE.MeshBasicMaterial({
-		color: 0xffff66,
-		side: THREE.DoubleSide,
-		transparent: true,
-		opacity: 1.0,
-		polygonOffset: true,
-		polygonOffsetFactor: -1, // negative pulls toward the camera
-		polygonOffsetUnits: -1
-	  });
-	  const selMesh = new THREE.Mesh(selGeom, selMat);
-	  selMesh.name = 'selectionMarker';
-	  scene.add(selMesh);
-
-	  updateSelectionUI();
 	}
 
+	// Handle triangle selection
+	function performSelection(ev) {
+		if (!loadedModels.length) return;
+
+		if (document.pointerLockElement === renderer.domElement) {
+			mouse.x = 0;
+			mouse.y = 0;
+		} else {
+			const rect = renderer.domElement.getBoundingClientRect();
+			const x = ev.clientX - rect.left;
+			const y = ev.clientY - rect.top;
+			mouse.x = (x / rect.width) * 2 - 1;
+			mouse.y = -(y / rect.height) * 2 + 1;
+		}
+
+		raycaster.setFromCamera(mouse, camera);
+
+		const visibleMeshes = loadedModels
+			.filter(m => m.mesh && m.mesh.visible)
+			.map(m => m.mesh);
+
+		const inter = raycaster.intersectObjects(visibleMeshes, false);
+		if (inter.length === 0) {
+			clearSelection();
+			updateSelectionUI();
+			return;
+		}
+
+		let hit = null;
+		for (const i of inter) {
+			if (i.face && i.object.visible) {
+				hit = i;
+				break;
+			}
+		}
+
+		if (!hit) {
+			clearSelection();
+			updateSelectionUI();
+			return;
+		}
+
+		const face = hit.face;
+		const geom = hit.object.geometry;
+		const pos = geom.attributes.position;
+		const a = face.a, b = face.b, c = face.c;
+		const va = new THREE.Vector3().fromBufferAttribute(pos, a);
+		const vb = new THREE.Vector3().fromBufferAttribute(pos, b);
+		const vc = new THREE.Vector3().fromBufferAttribute(pos, c);
+
+		const newTri = {
+			index: Math.floor(hit.faceIndex),
+			verts: [va, vb, vc],
+			modelName: hit.object.name
+		};
+
+		// Check if triangle is already selected (match by index + modelName)
+		const existingIndex = selectedTriangles.findIndex(
+			t => t.index === newTri.index && t.modelName === newTri.modelName
+		);
+
+		if (existingIndex !== -1) {
+			// It's already selected → remove it
+			selectedTriangles.splice(existingIndex, 1);
+			updateSelectionUI();
+			removeSelectionMarker(newTri);
+			return;
+		}
+
+		// If single-select mode is active, clear previous selections
+		if (!multiSelectCheckbox.checked) {
+			clearSelection();
+		}
+
+		selectedTriangles.push(newTri);
+		addSelectionMarker(newTri);
+		updateSelectionUI();
+	}
+
+	function removeSelectionMarker(tri) {
+		const markerName = `selectionMarker_${tri.modelName}_${tri.index}`;
+		const marker = scene.getObjectByName(markerName);
+		if (marker) scene.remove(marker);
+	}
+	
+	function addSelectionMarker(tri) {
+		const selGeom = new THREE.BufferGeometry();
+		const arr = new Float32Array([
+			tri.verts[0].x, tri.verts[0].y, tri.verts[0].z,
+			tri.verts[1].x, tri.verts[1].y, tri.verts[1].z,
+			tri.verts[2].x, tri.verts[2].y, tri.verts[2].z
+		]);
+		selGeom.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+		selGeom.setIndex([0, 1, 2]);
+
+		const selMat = new THREE.MeshBasicMaterial({
+			color: 0xffff66,
+			side: THREE.DoubleSide,
+			transparent: true,
+			opacity: 1.0,
+			polygonOffset: true,
+			polygonOffsetFactor: -1,
+			polygonOffsetUnits: -1
+		});
+
+		const selMesh = new THREE.Mesh(selGeom, selMat);
+		selMesh.name = `selectionMarker_${tri.modelName}_${tri.index}`;
+		scene.add(selMesh);
+	}
+	
     renderer.domElement.addEventListener('click', (ev)=>{
       // If user explicitly selected Orbit mode, always treat click as selection (no pointer lock)
       if(controlMode === 'orbit'){
@@ -1206,7 +1434,7 @@
     function buildTest(){
       const verts = [[-200,-200,-200],[200,-200,-200],[200,200,-200],[-200,200,-200],[-200,-200,200],[200,-200,200],[200,200,200],[-200,200,200]];
       const tris = [[0,1,2],[0,2,3],[4,7,6],[4,6,5],[0,4,5],[0,5,1],[1,5,6],[1,6,2],[2,6,7],[2,7,3],[3,7,4],[3,4,0]];
-      buildGeometry(verts,tris);
+      buildGeometry(verts, tris, `Main Model`, true);
     }
     buildTest();
 
