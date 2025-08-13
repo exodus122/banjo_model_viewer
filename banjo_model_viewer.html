@@ -1,0 +1,1233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Banjo Model Viewer</title>
+  <style>
+    :root{--sidebar-w:320px}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Helvetica,Arial}
+    #app{display:flex;height:100vh;overflow:hidden}
+    #canvas-wrap{flex:1;position:relative;background:#111}
+    canvas{display:block;width:100%;height:100%}
+    #sidebar{width:var(--sidebar-w);background:#0f1720;color:#e6eef6;padding:12px;box-sizing:border-box;overflow:auto}
+    h2{margin:4px 0 10px;font-size:16px}
+    label{display:block;margin-top:8px;font-size:13px}
+    .row{display:flex;gap:8px;align-items:center}
+    input[type=range]{width:100%}
+    select, button{margin-top:8px;padding:8px;border-radius:6px;border:none;background:#2563eb;color:white;cursor:pointer}
+    .muted{color:#9fb0c8;font-size:13px}
+    .info{background:#071624;padding:8px;border-radius:6px;margin-top:8px;font-family:monospace;font-size:13px}
+    .controls{margin-top:6px}
+    .section{margin-bottom:12px}
+    .select-info{background:#071624;padding:8px;border-radius:6px;margin-top:8px;font-size:13px}
+    a.download-link{color:#9fe7ff;display:inline-block;margin-top:6px}
+    .footer{margin-top:12px;font-size:12px;color:#9fb0c8}
+	.sel-verts{overflow-wrap: anywhere;}
+    #status{margin-top:8px;padding:8px;border-radius:6px;background:#221a11;color:#ffd;}
+	#crosshair {
+	  position: absolute;
+	  left: 50%;
+	  top: 50%;
+	  width: 16px;
+	  height: 16px;
+	  margin-left: -8px;
+	  margin-top: -8px;
+	  pointer-events: none;
+	  z-index: 10;
+	}
+
+	#crosshair::before, #crosshair::after {
+	  content: '';
+	  position: absolute;
+	  background: white;
+	}
+
+	#crosshair::before {
+	  left: 7px;
+	  top: 0;
+	  width: 2px;
+	  height: 16px;
+	}
+
+	#crosshair::after {
+	  top: 7px;
+	  left: 0;
+	  width: 16px;
+	  height: 2px;
+	}
+	
+	#mapDropdown {
+	  max-width: 250px;
+	  box-sizing: border-box;
+	}
+  </style>
+
+  <!-- Import map to allow bare "three" imports from example modules. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.152.2/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-wrap">
+      <canvas id="gl"></canvas>
+	  <div id="crosshair"></div>
+      <div id="hint" style="position:absolute;left:10px;top:10px;background:rgba(0,0,0,0.4);padding:6px;border-radius:6px;color:#dbeafe;font-family:monospace;font-size:13px">Click canvas to lock mouse &amp; fly (WASD + SPACE/C to move up/down). Press Esc to unlock pointer</div>
+    </div>
+
+    <div id="sidebar">
+      <h2>Banjo Model Viewer</h2>
+
+      <div class="section">
+        <div class="muted">Game:</div>
+		<select id="selected-game">
+			<option value="BK">Banjo-Kazooie</option>
+			<option value="BT">Banjo-Tooie</option>
+			<!--<option value="Default">Default</option>-->
+		</select>
+		<select id="mapDropdown"></select>
+        <!--<label>Load model file (binary or text). Supported binary format:
+          <div class="muted">[uint16 vertexCount][uint16 triCount][int16 x,y,z ...][uint16 i,j,k ...]</div>-->
+        </label>
+		<button id="loadMap">Load Map</button>
+        <input id="file" type="file" accept="*/*" />
+        <!--<div class="muted">Or use the sample files below (click to download):</div>
+        <a id="download-sample-text" class="download-link" href="#">Download sample model (.tri.txt)</a><br>
+        <a id="download-sample-bin" class="download-link" href="#">Download binary sample (.tri.bin)</a><br>
+        <a id="download-sample-large" class="download-link" href="#">Download large-range sample (.tri.txt)</a>-->
+      </div>
+
+      <div class="section controls">
+        <h3>Options</h3>
+        <div class="muted">Control mode:</div>
+        <select id="control-mode">
+          <!--<option value="auto">Auto (try Pointer Lock, fallback to Orbit)</option>-->
+          <option value="pointer">Fly Mode (WASD)</option>
+          <option value="orbit">Orbit (mouse drag + wheel)</option>
+        </select>
+        <div id="status" role="status" aria-live="polite">Status: starting...</div>
+        <label><input id="wireframe" type="checkbox" checked> Draw triangle edges</label>
+        <label><input id="backface" type="checkbox"> Double-sided</label>
+        <label style="display:none;"><input id="translucent" type="checkbox" checked> Translucent (opacity)</label>
+        <label>Opacity <input id="opacity" type="range" min="0" max="1" step="0.01" value="1.0"></label>
+        <label style="display:none;"><input id="grid" type="checkbox"> Draw grid</label>
+      </div>
+	  
+	  <div class="section">
+        <h3>Selection</h3>
+        <div class="select-info">
+          <div>Selected triangle index: <span id="sel-index">none</span></div>
+          <div>Vertices:</div>
+          <text id="sel-verts">none</pre>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Camera</h3>
+        <div class="info">
+          <div>pos: <span id="cam-pos">0,0,0</span></div>
+          <div>rot (deg): <span id="cam-rot">0,0,0</span></div>
+        </div>
+      </div>
+
+      <!--<div class="section footer muted">
+      </div>-->
+    </div>
+  </div>
+
+  <script type="module">
+    const BK_Maps = [
+      { name: "SM_SPIRAL_MOUNTAIN", pointer: "", sceneID: "1", modelAPointer: "14CF", modelBPointer: "14D0" },
+	  { name: "MM_MUMBOS_MOUNTAIN", pointer: "", sceneID: "2", modelAPointer: "14AA", modelBPointer: "14AB" },
+	  { name: "TTC_BLUBBERS_SHIP", pointer: "", sceneID: "5", modelAPointer: "146F", modelBPointer: "1470" },
+	  { name: "TTC_NIPPERS_SHELL", pointer: "", sceneID: "6", modelAPointer: "146D", modelBPointer: "146E" },
+	  { name: "TTC_TREASURE_TROVE_COVE", pointer: "", sceneID: "7", modelAPointer: "146B", modelBPointer: "146C" },
+	  { name: "TTC_SHARKFOOD_ISLAND", pointer: "", sceneID: "8F", modelAPointer: "1473", modelBPointer: "" },
+	  { name: "TTC_SANDCASTLE", pointer: "", sceneID: "A", modelAPointer: "1471", modelBPointer: "1472" },
+	  { name: "CC_CLANKERS_CAVERN", pointer: "", sceneID: "B", modelAPointer: "14ED", modelBPointer: "14EE" },
+	  { name: "MM_TICKERS_TOWER", pointer: "", sceneID: "C", modelAPointer: "14AC", modelBPointer: "14AD" },
+	  { name: "BGS_BUBBLEGLOOP_SWAMP", pointer: "", sceneID: "D", modelAPointer: "14D1", modelBPointer: "14D2" },
+	  { name: "MM_MUMBOS_SKULL", pointer: "", sceneID: "E", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "BGS_MR_VILE", pointer: "", sceneID: "10", modelAPointer: "14D3", modelBPointer: "" },
+	  { name: "BGS_TIPTUP", pointer: "", sceneID: "11", modelAPointer: "14D4", modelBPointer: "14D5" },
+	  { name: "GV_GOBIS_VALLEY", pointer: "", sceneID: "12", modelAPointer: "1474", modelBPointer: "1475" },
+	  { name: "GV_SNS_CHAMBER", pointer: "", sceneID: "92", modelAPointer: "147E", modelBPointer: "" },
+	  { name: "GV_MEMORY_GAME", pointer: "", sceneID: "13", modelAPointer: "1476", modelBPointer: "" },
+	  { name: "GV_SANDYBUTTS_MAZE", pointer: "", sceneID: "14", modelAPointer: "1478", modelBPointer: "1479" },
+	  { name: "GV_WATER_PYRAMID", pointer: "", sceneID: "15", modelAPointer: "147A", modelBPointer: "147B" },
+	  { name: "GV_RUBEES_CHAMBER", pointer: "", sceneID: "16", modelAPointer: "147C", modelBPointer: "" },
+	  { name: "GV_INSIDE_JINXY", pointer: "", sceneID: "1A", modelAPointer: "147D", modelBPointer: "" },
+	  { name: "MMM_MAD_MONSTER_MANSION", pointer: "", sceneID: "1B", modelAPointer: "147F", modelBPointer: "1480" },
+	  { name: "MMM_CHURCH", pointer: "", sceneID: "1C", modelAPointer: "1486", modelBPointer: "1487" },
+	  { name: "MMM_CELLAR", pointer: "", sceneID: "1D", modelAPointer: "1482", modelBPointer: "149B" },
+	  { name: "CS_START_NINTENDO", pointer: "", sceneID: "1E", modelAPointer: "149D", modelBPointer: "14A1" },
+	  { name: "CS_START_RAREWARE", pointer: "", sceneID: "1F", modelAPointer: "149E", modelBPointer: "14A0" },
+	  { name: "CS_END_NOT_100", pointer: "", sceneID: "20", modelAPointer: "14A9", modelBPointer: "14A5" },
+	  { name: "CC_WITCH_SWITCH_ROOM", pointer: "", sceneID: "21", modelAPointer: "14EF", modelBPointer: "" },
+	  { name: "CC_INSIDE_CLANKER", pointer: "", sceneID: "22", modelAPointer: "14F0", modelBPointer: "14F1" },
+	  { name: "CC_GOLDFEATHER_ROOM", pointer: "", sceneID: "23", modelAPointer: "14F2", modelBPointer: "" },
+	  { name: "MMM_TUMBLARS_SHED", pointer: "", sceneID: "24", modelAPointer: "1488", modelBPointer: "" },
+	  { name: "MMM_WELL", pointer: "", sceneID: "25", modelAPointer: "1495", modelBPointer: "1496" },
+	  { name: "MMM_NAPPERS_ROOM", pointer: "", sceneID: "26", modelAPointer: "1485", modelBPointer: "149A" },
+	  { name: "FP_FREEZEEZY_PEAK", pointer: "", sceneID: "27", modelAPointer: "14C8", modelBPointer: "14C9" },
+	  { name: "MMM_EGG_ROOM", pointer: "", sceneID: "28", modelAPointer: "1489", modelBPointer: "148A" },
+	  { name: "MMM_NOTE_ROOM", pointer: "", sceneID: "29", modelAPointer: "148B", modelBPointer: "148C" },
+	  { name: "MMM_FEATHER_ROOM", pointer: "", sceneID: "2A", modelAPointer: "148D", modelBPointer: "148E" },
+	  { name: "MMM_SECRET_CHURCH_ROOM", pointer: "", sceneID: "2B", modelAPointer: "1483", modelBPointer: "1484" },
+	  { name: "MMM_BATHROOM", pointer: "", sceneID: "2C", modelAPointer: "148F", modelBPointer: "1490" },
+	  { name: "MMM_BEDROOM", pointer: "", sceneID: "2D", modelAPointer: "1491", modelBPointer: "1492" },
+	  { name: "MMM_HONEYCOMB_ROOM", pointer: "", sceneID: "2E", modelAPointer: "1493", modelBPointer: "1494" },
+	  { name: "MMM_WATERDRAIN_BARREL", pointer: "", sceneID: "2F", modelAPointer: "1481", modelBPointer: "1497" },
+	  { name: "MMM_MUMBOS_SKULL", pointer: "", sceneID: "30", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "MMM_INSIDE_LOGGO", pointer: "", sceneID: "8D", modelAPointer: "1498", modelBPointer: "1499" },
+	  { name: "RBB_RUSTY_BUCKET_BAY", pointer: "", sceneID: "31", modelAPointer: "14B0", modelBPointer: "14B1" },
+	  { name: "RBB_ANCHOR_ROOM", pointer: "", sceneID: "8B", modelAPointer: "14C5", modelBPointer: "14C6" },
+	  { name: "RBB_ENGINE_ROOM", pointer: "", sceneID: "34", modelAPointer: "14B2", modelBPointer: "14B3" },
+	  { name: "RBB_WAREHOUSE", pointer: "", sceneID: "35", modelAPointer: "14B4", modelBPointer: "14B5" },
+	  { name: "RBB_BOATHOUSE", pointer: "", sceneID: "36", modelAPointer: "14B6", modelBPointer: "14B7" },
+	  { name: "RBB_CONTAINER_1", pointer: "", sceneID: "37", modelAPointer: "14B8", modelBPointer: "" },
+	  { name: "RBB_CONTAINER_3", pointer: "", sceneID: "38", modelAPointer: "14BA", modelBPointer: "" },
+	  { name: "RBB_CREW_CABIN", pointer: "", sceneID: "39", modelAPointer: "14BD", modelBPointer: "" },
+	  { name: "RBB_BOSS_BOOM_BOX", pointer: "", sceneID: "3A", modelAPointer: "14BE", modelBPointer: "14BF" },
+	  { name: "RBB_STORAGE_ROOM", pointer: "", sceneID: "3B", modelAPointer: "14C1", modelBPointer: "14C2" },
+	  { name: "RBB_KITCHEN", pointer: "", sceneID: "3C", modelAPointer: "14C3", modelBPointer: "14C4" },
+	  { name: "RBB_NAVIGATION_ROOM", pointer: "", sceneID: "3D", modelAPointer: "14C0", modelBPointer: "14C7" },
+	  { name: "RBB_CONTAINER_2", pointer: "", sceneID: "3E", modelAPointer: "14B9", modelBPointer: "" },
+	  { name: "RBB_CAPTAINS_CABIN", pointer: "", sceneID: "3F", modelAPointer: "14BB", modelBPointer: "14BC" },
+	  { name: "CCW_HUB", pointer: "", sceneID: "40", modelAPointer: "14D8", modelBPointer: "14E3" },
+	  { name: "FP_BOGGYS_IGLOO", pointer: "", sceneID: "41", modelAPointer: "14CA", modelBPointer: "14CE" },
+	  { name: "FP_WOZZAS_CAVE", pointer: "", sceneID: "7F", modelAPointer: "14CC", modelBPointer: "14CD" },
+	  { name: "CCW_SPRING", pointer: "", sceneID: "43", modelAPointer: "14D9", modelBPointer: "14E4" },
+	  { name: "CCW_SUMMER", pointer: "", sceneID: "44", modelAPointer: "14DA", modelBPointer: "14E5" },
+	  { name: "CCW_AUTUMN", pointer: "", sceneID: "45", modelAPointer: "14DB", modelBPointer: "14E6" },
+	  { name: "CCW_WINTER", pointer: "", sceneID: "46", modelAPointer: "14DC", modelBPointer: "14E7" },
+	  { name: "BGS_MUMBOS_SKULL", pointer: "", sceneID: "47", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "FP_MUMBOS_SKULL", pointer: "", sceneID: "48", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "CCW_SPRING_MUMBOS_SKULL", pointer: "", sceneID: "4A", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "CCW_SUMMER_MUMBOS_SKULL", pointer: "", sceneID: "4B", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "CCW_AUTUMN_MUMBOS_SKULL", pointer: "", sceneID: "4C", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "CCW_WINTER_MUMBOS_SKULL", pointer: "", sceneID: "4D", modelAPointer: "14AE", modelBPointer: "" },
+	  { name: "FP_CHRISTMAS_TREE", pointer: "", sceneID: "53", modelAPointer: "14CB", modelBPointer: "" },
+	  { name: "CCW_SUMMER_ZUBBA_HIVE", pointer: "", sceneID: "5A", modelAPointer: "14DD", modelBPointer: "" },
+	  { name: "CCW_SPRING_ZUBBA_HIVE", pointer: "", sceneID: "5B", modelAPointer: "14DD", modelBPointer: "" },
+	  { name: "CCW_AUTUMN_ZUBBA_HIVE", pointer: "", sceneID: "5C", modelAPointer: "14DD", modelBPointer: "" },
+	  { name: "CCW_SPRING_NABNUTS_HOUSE", pointer: "", sceneID: "5E", modelAPointer: "14DE", modelBPointer: "" },
+	  { name: "CCW_SUMMER_NABNUTS_HOUSE", pointer: "", sceneID: "5F", modelAPointer: "14DE", modelBPointer: "" },
+	  { name: "CCW_AUTUMN_NABNUTS_HOUSE", pointer: "", sceneID: "60", modelAPointer: "14DE", modelBPointer: "" },
+	  { name: "CCW_WINTER_NABNUTS_HOUSE", pointer: "", sceneID: "61", modelAPointer: "14DE", modelBPointer: "" },
+	  { name: "CCW_WINTER_HONEYCOMB_ROOM", pointer: "", sceneID: "62", modelAPointer: "14E0", modelBPointer: "" },
+	  { name: "CCW_AUTUMN_NABNUTS_WATER_SUPPLY", pointer: "", sceneID: "63", modelAPointer: "14E1", modelBPointer: "14E2" },
+	  { name: "CCW_WINTER_NABNUTS_WATER_SUPPLY", pointer: "", sceneID: "64", modelAPointer: "14E1", modelBPointer: "14E2" },
+	  { name: "CCW_SPRING_WHIPCRACK_ROOM", pointer: "", sceneID: "65", modelAPointer: "14DF", modelBPointer: "" },
+	  { name: "CCW_SUMMER_WHIPCRACK_ROOM", pointer: "", sceneID: "66", modelAPointer: "14DF", modelBPointer: "" },
+	  { name: "CCW_AUTUMN_WHIPCRACK_ROOM", pointer: "", sceneID: "67", modelAPointer: "14DF", modelBPointer: "" },
+	  { name: "CCW_WINTER_WHIPCRACK_ROOM", pointer: "", sceneID: "68", modelAPointer: "14DF", modelBPointer: "" },
+	  { name: "GL_MM_LOBBY", pointer: "", sceneID: "69", modelAPointer: "14F3", modelBPointer: "150B" },
+	  { name: "GL_TTC_AND_CC_PUZZLE", pointer: "", sceneID: "6A", modelAPointer: "14F4", modelBPointer: "150C" },
+	  { name: "GL_180_NOTE_DOOR", pointer: "", sceneID: "6B", modelAPointer: "14F5", modelBPointer: "1510" },
+	  { name: "GL_RED_CAULDRON_ROOM", pointer: "", sceneID: "6C", modelAPointer: "14F6", modelBPointer: "150D" },
+	  { name: "GL_TTC_LOBBY", pointer: "", sceneID: "6D", modelAPointer: "14F7", modelBPointer: "1512" },
+	  { name: "GL_GV_LOBBY", pointer: "", sceneID: "6E", modelAPointer: "14F8", modelBPointer: "14A8" },
+	  { name: "GL_FP_LOBBY", pointer: "", sceneID: "6F", modelAPointer: "14F9", modelBPointer: "14FA" },
+	  { name: "GL_GV_PUZZLE", pointer: "", sceneID: "74", modelAPointer: "14FD", modelBPointer: "" },
+	  { name: "GL_CC_LOBBY", pointer: "", sceneID: "70", modelAPointer: "14FB", modelBPointer: "1507" },
+	  { name: "GL_MMM_LOBBY", pointer: "", sceneID: "75", modelAPointer: "14FE", modelBPointer: "" },
+	  { name: "GL_CRYPT", pointer: "", sceneID: "7A", modelAPointer: "14FF", modelBPointer: "" },
+	  { name: "GL_STATUE_ROOM", pointer: "", sceneID: "71", modelAPointer: "1500", modelBPointer: "150E" },
+	  { name: "GL_BGS_LOBBY", pointer: "", sceneID: "72", modelAPointer: "1501", modelBPointer: "1511" },
+	  { name: "GL_640_NOTE_DOOR", pointer: "", sceneID: "76", modelAPointer: "1502", modelBPointer: "1508" },
+	  { name: "GL_RBB_LOBBY", pointer: "", sceneID: "77", modelAPointer: "1503", modelBPointer: "1509" },
+	  { name: "GL_RBB_AND_MMM_PUZZLE", pointer: "", sceneID: "78", modelAPointer: "1504", modelBPointer: "150A" },
+	  { name: "GL_CCW_LOBBY", pointer: "", sceneID: "79", modelAPointer: "1505", modelBPointer: "" },
+	  { name: "GL_FF_ENTRANCE", pointer: "", sceneID: "80", modelAPointer: "1506", modelBPointer: "1514" },
+	  { name: "GL_DINGPOT", pointer: "", sceneID: "93", modelAPointer: "150F", modelBPointer: "1513" },
+	  { name: "GL_BATTLEMENTS", pointer: "", sceneID: "90", modelAPointer: "14FC", modelBPointer: "1515" },
+	  { name: "CS_INTRO_GL_DINGPOT_1", pointer: "", sceneID: "7B", modelAPointer: "150F", modelBPointer: "" },
+	  { name: "CS_INTRO_BANJOS_HOUSE_1", pointer: "", sceneID: "7C", modelAPointer: "14A2", modelBPointer: "" },
+	  { name: "CS_SPIRAL_MOUNTAIN_1", pointer: "", sceneID: "7D", modelAPointer: "14CF", modelBPointer: "14D0" },
+	  { name: "CS_SPIRAL_MOUNTAIN_2", pointer: "", sceneID: "7E", modelAPointer: "14CF", modelBPointer: "14D0" },
+	  { name: "CS_INTRO_GL_DINGPOT_2", pointer: "", sceneID: "81", modelAPointer: "150F", modelBPointer: "" },
+	  { name: "CS_ENTERING_GL_MACHINE_ROOM", pointer: "", sceneID: "82", modelAPointer: "150F", modelBPointer: "" },
+	  { name: "CS_GAME_OVER_MACHINE_ROOM", pointer: "", sceneID: "83", modelAPointer: "150F", modelBPointer: "" },
+	  { name: "CS_UNUSED_MACHINE_ROOM", pointer: "", sceneID: "84", modelAPointer: "150F", modelBPointer: "" },
+	  { name: "CS_SPIRAL_MOUNTAIN_3", pointer: "", sceneID: "85", modelAPointer: "14CF", modelBPointer: "14D0" },
+	  { name: "CS_SPIRAL_MOUNTAIN_4", pointer: "", sceneID: "86", modelAPointer: "14CF", modelBPointer: "14D0" },
+	  { name: "CS_SPIRAL_MOUNTAIN_5", pointer: "", sceneID: "87", modelAPointer: "14A6", modelBPointer: "" },
+	  { name: "CS_SPIRAL_MOUNTAIN_6", pointer: "", sceneID: "88", modelAPointer: "14CF", modelBPointer: "14D0" },
+	  { name: "CS_INTRO_SPIRAL_7", pointer: "", sceneID: "94", modelAPointer: "14CF", modelBPointer: "14D0" },
+	  { name: "CS_END_SPIRAL_MOUNTAIN_1", pointer: "", sceneID: "98", modelAPointer: "149F", modelBPointer: "14A3" },
+	  { name: "CS_END_SPIRAL_MOUNTAIN_2", pointer: "", sceneID: "99", modelAPointer: "149F", modelBPointer: "14A3" },
+	  { name: "CS_END_ALL_100", pointer: "", sceneID: "95", modelAPointer: "14A9", modelBPointer: "14A5" },
+	  { name: "CS_INTRO_BANJOS_HOUSE_2", pointer: "", sceneID: "89", modelAPointer: "14A2", modelBPointer: "14A4" },
+	  { name: "CS_INTRO_BANJOS_HOUSE_3", pointer: "", sceneID: "8A", modelAPointer: "14A2", modelBPointer: "14A4" },
+	  { name: "CS_END_BEACH_1", pointer: "", sceneID: "96", modelAPointer: "14A9", modelBPointer: "14A5" },
+	  { name: "CS_END_BEACH_2", pointer: "", sceneID: "97", modelAPointer: "14A9", modelBPointer: "14A5" },
+	  { name: "FILE_SELECT", pointer: "", sceneID: "91", modelAPointer: "14A2", modelBPointer: "14A4" },
+	  { name: "SM_BANJOS_HOUSE", pointer: "", sceneID: "8C", modelAPointer: "14A2", modelBPointer: "14A4" },
+	  { name: "GL_FURNACE_FUN", pointer: "", sceneID: "8E", modelAPointer: "14E8", modelBPointer: "" },
+	];
+    const BT_Maps = [
+	  { name: "GL - Entrance", pointer: "7990", sceneID: "AD", modelAPointer: "c57c", modelBPointer: "0" },
+	  { name: "SM - behind the waterfall", pointer: "7994", sceneID: "AE", modelAPointer: "c580", modelBPointer: "c584" },
+	  { name: "SM - Spiral Mountain", pointer: "7998", sceneID: "AF", modelAPointer: "c56c", modelBPointer: "c570" },
+	  { name: "SM - Banjo's House", pointer: "7ca8", sceneID: "0173", modelAPointer: "c574", modelBPointer: "c578" },
+	  { name: "SM - Banjo's House (Destroyed)", pointer: "7ca8", sceneID: "0173", modelAPointer: "c5a8", modelBPointer: "" },
+	  { name: "SM - Digger Tunnel", pointer: "7be0", sceneID: "0141", modelAPointer: "c598", modelBPointer: "0" },
+	  { name: "JV - Jinjo Village", pointer: "7be4", sceneID: "0142", modelAPointer: "c88c", modelBPointer: "0" },
+	  { name: "JV - Bottles house", pointer: "7be8", sceneID: "0143", modelAPointer: "c8c8", modelBPointer: "c8d4" },
+	  { name: "JV - King Jingalings throne room", pointer: "7bec", sceneID: "0144", modelAPointer: "", modelBPointer: "" },
+	  { name: "JV - Zombiefied Throne Room", pointer: "7d48", sceneID: "019B", modelAPointer: "", modelBPointer: "" },
+	  { name: "JV - Green jinjo's house", pointer: "7bf0", sceneID: "0145", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Black jinjo's house", pointer: "7bf4", sceneID: "0146", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Yellow jinjo's house", pointer: "7bf8", sceneID: "0147", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Blue jinjo's house", pointer: "7bfc", sceneID: "0148", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Unused jinjo's house", pointer: "7c00", sceneID: "0149", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Brown jinjo's house", pointer: "7c04", sceneID: "014A", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Orange jinjo's house", pointer: "7c08", sceneID: "014B", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Purple jinjo's house", pointer: "7c0c", sceneID: "014C", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - Red jinjo's house", pointer: "7c10", sceneID: "014D", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "JV - White jinjo's house", pointer: "7c14", sceneID: "014E", modelAPointer: "c8c4", modelBPointer: "" },
+	  { name: "IOH - Wooden Hollow", pointer: "7c18", sceneID: "014F", modelAPointer: "c890", modelBPointer: "" },
+	  { name: "IOH - Heggy's egg shed", pointer: "7c1c", sceneID: "0150", modelAPointer: "c8a4", modelBPointer: "0" },
+	  { name: "IOH - Jiggywiggy's temple", pointer: "7c20", sceneID: "0151", modelAPointer: "c894", modelBPointer: "0" },
+	  { name: "IOH - Plateau", pointer: "7c24", sceneID: "0152", modelAPointer: "c898", modelBPointer: "0" },
+	  { name: "IOH - Honey B's Hive", pointer: "7c28", sceneID: "0153", modelAPointer: "c8c0", modelBPointer: "" },
+	  { name: "IOH - Pine Grove", pointer: "7c2c", sceneID: "0154", modelAPointer: "c89c", modelBPointer: "c8a0" },
+	  { name: "IOH - Cliff Top", pointer: "7c30", sceneID: "0155", modelAPointer: "c8a8", modelBPointer: "0" },
+	  { name: "IOH - Mumbo's Skull", pointer: "7c34", sceneID: "0156", modelAPointer: "", modelBPointer: "" },
+	  { name: "IOH - Humba Wumba's wigwam", pointer: "7c38", sceneID: "0157", modelAPointer: "", modelBPointer: "" },
+	  { name: "IOH - Wasteland", pointer: "7c44", sceneID: "015A", modelAPointer: "c8ac", modelBPointer: "0" },
+	  { name: "IOH - Digger Tunnel", pointer: "7c48", sceneID: "015B", modelAPointer: "c8b8", modelBPointer: "" },
+	  { name: "IOH - Quagmire", pointer: "7c4c", sceneID: "015C", modelAPointer: "c8b0", modelBPointer: "0" },
+	  { name: "MT - Wumba's Wigwam", pointer: "79b4", sceneID: "B6", modelAPointer: "c588", modelBPointer: "c5a0" },
+	  { name: "MT - Mumbo's Skull", pointer: "79b8", sceneID: "B7", modelAPointer: "c58c", modelBPointer: "c590" },
+	  { name: "MT", pointer: "79bc", sceneID: "B8", modelAPointer: "c5b0", modelBPointer: "c5b4" },
+	  { name: "MT - Prison Compound", pointer: "79c4", sceneID: "B9", modelAPointer: "c5b8", modelBPointer: "c5bc" },
+	  { name: "MT - Columns Vault", pointer: "79c8", sceneID: "BA", modelAPointer: "c5c0", modelBPointer: "0" },
+	  { name: "MT - Mayan Kickball Stadium", pointer: "79cc", sceneID: "BB", modelAPointer: "0", modelBPointer: "c5c4" },
+	  { name: "MT - Code Chamber", pointer: "79cc", sceneID: "BC", modelAPointer: "c5c8", modelBPointer: "" },
+	  { name: "MT - Jade Snake Grove", pointer: "79ec", sceneID: "C4", modelAPointer: "c5cc", modelBPointer: "c5d0" },
+	  { name: "MT - Treasure Chamber", pointer: "79f0", sceneID: "C5", modelAPointer: "c5d4", modelBPointer: "0" },
+	  { name: "MT - Kickball Arena", pointer: "79f4", sceneID: "C6", modelAPointer: "c5d8", modelBPointer: "0" },
+	  { name: "MT - kickball arena", pointer: "7a00", sceneID: "00C9", modelAPointer: "c5d8", modelBPointer: "0" },
+	  { name: "MT - Targitzan's Slighty Sacred Temple", pointer: "7cb8", sceneID: "0177", modelAPointer: "c5dc", modelBPointer: "" },
+	  { name: "MT - Inside Targitzan's temple", pointer: "7cbc", sceneID: "0178", modelAPointer: "c5e0", modelBPointer: "" },
+	  { name: "MT - Targitzan temple lobby", pointer: "7cc0", sceneID: "0179", modelAPointer: "c5e4", modelBPointer: "" },
+	  { name: "MT - Targitzan's Really Sacred Chamber", pointer: "7cc4", sceneID: "017A", modelAPointer: "c5dc", modelBPointer: "" },
+	  { name: "GGM", pointer: "79f8", sceneID: "C7", modelAPointer: "c61c", modelBPointer: "c660" },
+	  { name: "GGM - Wumba's Wigwam", pointer: "7a80", sceneID: "00E9", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM - Mumbo's Skull", pointer: "7ca0", sceneID: "0171", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM - fuel depot", pointer: "7a04", sceneID: "00CA", modelAPointer: "c5ec", modelBPointer: "c650" },
+	  { name: "GGM - crushing shed", pointer: "7a08", sceneID: "00CB", modelAPointer: "c5f0", modelBPointer: "c628" },
+	  { name: "GGM - flooded caves", pointer: "7a0c", sceneID: "00CC", modelAPointer: "c5f4", modelBPointer: "c63c" },
+	  { name: "GGM - water storage", pointer: "7a10", sceneID: "00CD", modelAPointer: "c5f8", modelBPointer: "c648" },
+	  { name: "GGM - waterfall cavern", pointer: "7a14", sceneID: "00CE", modelAPointer: "c5fc", modelBPointer: "c620" },
+	  { name: "GGM - power hut basement", pointer: "7a18", sceneID: "00CF", modelAPointer: "c600", modelBPointer: "c634" },
+	  { name: "GGM - chuffy's cab", pointer: "7a1c", sceneID: "00D0", modelAPointer: "c604", modelBPointer: "" },
+	  { name: "GGM - inside chuffy's boiler boss", pointer: "7a20", sceneID: "00D1", modelAPointer: "c608", modelBPointer: "c654" },
+	  { name: "GGM - gloomy caverns", pointer: "7a24", sceneID: "00D2", modelAPointer: "c60c", modelBPointer: "c630" },
+	  { name: "GGM - generator caverns", pointer: "7a28", sceneID: "00D3", modelAPointer: "c610", modelBPointer: "c640" },
+	  { name: "GGM - power hut", pointer: "7a2c", sceneID: "00D4", modelAPointer: "c614", modelBPointer: "c62c" },
+	  { name: "GGM - wumba's wigwam", pointer: "7a30", sceneID: "00D5", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM - train station", pointer: "7a38", sceneID: "00D7", modelAPointer: "c618", modelBPointer: "" },
+	  { name: "GGM - prospectors hut", pointer: "7a3c", sceneID: "00D8", modelAPointer: "c638", modelBPointer: "c664" },
+	  { name: "GGM - Mumbo's hut", pointer: "7a40", sceneID: "00D9", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM - toxic gas cave", pointer: "7a44", sceneID: "00DA", modelAPointer: "c644", modelBPointer: "0" },
+	  { name: "GGM - canary cave", pointer: "7a48", sceneID: "00DB", modelAPointer: "c624", modelBPointer: "c64c" },
+	  { name: "GGM - ordnance storage", pointer: "7a4c", sceneID: "00DC", modelAPointer: "c658", modelBPointer: "0" },
+	  { name: "GGM - Inside Chuffy's wagon", pointer: "7b60", sceneID: "0121", modelAPointer: "c654", modelBPointer: "0" },
+	  { name: "GGM - water supply pipe", pointer: "7b74", sceneID: "0126", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM - Ordnance Shooting Entrance", pointer: "7c68", sceneID: "0163", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM - Ordnance Shooting Game", pointer: "7c6c", sceneID: "0164", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM - Ordnance Shooting Game Multi", pointer: "7c70", sceneID: "0165", modelAPointer: "", modelBPointer: "" },
+	  { name: "WW - Witchyworld", pointer: "7a34", sceneID: "00D6", modelAPointer: "c668", modelBPointer: "c698" },
+	  { name: "WW - dodgem dome lobby", pointer: "7a50", sceneID: "00DD", modelAPointer: "c68c", modelBPointer: "0" },
+	  { name: "WW - dodgem challenge 1 vs 1", pointer: "7a54", sceneID: "00DE", modelAPointer: "c690", modelBPointer: "0" },
+	  { name: "WW - dodgem challenge 2 vs 1", pointer: "7a58", sceneID: "00DF", modelAPointer: "c690", modelBPointer: "0" },
+	  { name: "WW - dodgem challenge 3 vs 1", pointer: "7a5c", sceneID: "00E0", modelAPointer: "c690", modelBPointer: "0" },
+	  { name: "WW - crazy castle stockade", pointer: "7a60", sceneID: "00E1", modelAPointer: "c66c", modelBPointer: "" },
+	  { name: "WW - crazy castle lobby", pointer: "7a64", sceneID: "00E2", modelAPointer: "c674", modelBPointer: "" },
+	  { name: "WW - crazy castle pump room", pointer: "7a68", sceneID: "00E3", modelAPointer: "c670", modelBPointer: "" },
+	  { name: "WW - balloon burst game", pointer: "7a6c", sceneID: "00E4", modelAPointer: "c6a0", modelBPointer: "" },
+	  { name: "WW - hoop hurry game", pointer: "7a70", sceneID: "00E5", modelAPointer: "", modelBPointer: "" },
+	  { name: "WW - star spinner", pointer: "7a74", sceneID: "00E6", modelAPointer: "c688", modelBPointer: "c69c" },
+	  { name: "WW - the inferno", pointer: "7a78", sceneID: "00E7", modelAPointer: "c678", modelBPointer: "0" },
+	  { name: "WW - cave of horrors", pointer: "7a84", sceneID: "00EA", modelAPointer: "c67c", modelBPointer: "0" },
+	  { name: "WW - Haunted Caverns", pointer: "7a88", sceneID: "00EB", modelAPointer: "", modelBPointer: "c680" },
+	  { name: "WW - Train Station", pointer: "7a8c", sceneID: "00EC", modelAPointer: "c684", modelBPointer: "c6b0" },
+	  { name: "WW - Mr. Patch", pointer: "7ac0", sceneID: "00F9", modelAPointer: "c694", modelBPointer: "0" },
+	  { name: "WW - Saucer of Peril", pointer: "7b6c", sceneID: "0124", modelAPointer: "", modelBPointer: "" },
+	  { name: "WW - crazy castle stockade (sop)", pointer: "7bc8", sceneID: "013B", modelAPointer: "c66c", modelBPointer: "0" },
+	  { name: "WW - star spinner (sop)", pointer: "7bcc", sceneID: "013C", modelAPointer: "", modelBPointer: "" },
+	  { name: "WW - Mumbo's skull", pointer: "7cb4", sceneID: "0176", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL ", pointer: "7d78", sceneID: "01A7", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - Jollys", pointer: "7a90", sceneID: "00ED", modelAPointer: "c6e4", modelBPointer: "c714" },
+	  { name: "JRL - Humba's Wigwam", pointer: "7b5c", sceneID: "0120", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - Pawno", pointer: "7a94", sceneID: "00EE", modelAPointer: "c6ec", modelBPointer: "c6f0" },
+	  { name: "JRL - Mumbos Skull", pointer: "7a98", sceneID: "00EF", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - Atlantis", pointer: "7d7c", sceneID: "01A8", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - Smugglers Cavern", pointer: "7d74", sceneID: "01A6", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - Sea Bottom", pointer: "7d80", sceneID: "01A9", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - UFO", pointer: "7aa0", sceneID: "00F1", modelAPointer: "c6b8", modelBPointer: "c718" },
+	  { name: "JRL - Ancient Swimming Baths", pointer: "7aac", sceneID: "00F4", modelAPointer: "c6bc", modelBPointer: "c6c0" },
+	  { name: "JRL - Objects (Beta JRL)", pointer: "7ab0", sceneID: "00F5", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - Electric Eels Lair", pointer: "7ab4", sceneID: "00F6", modelAPointer: "c6c4", modelBPointer: "c6c8" },
+	  { name: "JRL - Seaweed Santchum", pointer: "7ab8", sceneID: "00F7", modelAPointer: "c6cc", modelBPointer: "c6d0" },
+	  { name: "JRL - Inside the big fish", pointer: "7abc", sceneID: "00F8", modelAPointer: "c6d4", modelBPointer: "c6d8" },
+	  { name: "JRL - Temple of the Fishes", pointer: "7ac4", sceneID: "00FA", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - Lord Woo Fak Fak", pointer: "7acc", sceneID: "00FC", modelAPointer: "c6dc", modelBPointer: "c6fc" },
+	  { name: "JRL - Blubber's Wave Race Hire", pointer: "7ad8", sceneID: "00FF", modelAPointer: "c6f4", modelBPointer: "" },
+	  { name: "JRL - sea bottom cavern", pointer: "7ce0", sceneID: "0181", modelAPointer: "", modelBPointer: "" },
+	  { name: "JRL - submarine multi", pointer: "7ce4", sceneID: "0182", modelAPointer: "", modelBPointer: "" },
+	  { name: "TL", pointer: "7b24", sceneID: "0112", modelAPointer: "c720", modelBPointer: "c750" },
+	  { name: "TL - terry's nest", pointer: "7b28", sceneID: "0113", modelAPointer: "c734", modelBPointer: "c75c" },
+	  { name: "TL - train station", pointer: "7b2c", sceneID: "0114", modelAPointer: "c740", modelBPointer: "" },
+	  { name: "TL - oogle boogles cave", pointer: "7b30", sceneID: "0115", modelAPointer: "c744", modelBPointer: "0" },
+	  { name: "TL - inside the mountain", pointer: "7b34", sceneID: "0116", modelAPointer: "c72c", modelBPointer: "c730" },
+	  { name: "TL - river passage", pointer: "7b38", sceneID: "0117", modelAPointer: "c738", modelBPointer: "c73c" },
+	  { name: "TL - styracosaurus family cave", pointer: "7b3c", sceneID: "0118", modelAPointer: "c728", modelBPointer: "0" },
+	  { name: "TL - unga bunga's cave", pointer: "7b40", sceneID: "0119", modelAPointer: "c748", modelBPointer: "0" },
+	  { name: "TL - stomping plains", pointer: "7b44", sceneID: "011A", modelAPointer: "c74c", modelBPointer: "0" },
+	  { name: "TL - bonfire caverns", pointer: "7b48", sceneID: "011B", modelAPointer: "c724", modelBPointer: "0" },
+	  { name: "TL - Humba's Wigwam", pointer: "7b54", sceneID: "011E", modelAPointer: "", modelBPointer: "" },
+	  { name: "TL - Humba's Wigwam Big", pointer: "7b64", sceneID: "0122", modelAPointer: "", modelBPointer: "" },
+	  { name: "TL - Inside chompa's belly", pointer: "7b68", sceneID: "0123", modelAPointer: "c608", modelBPointer: "0" },
+	  { name: "GI - outside", pointer: "7adc", sceneID: "0100", modelAPointer: "c760", modelBPointer: "c7a8" },
+	  { name: "GI - inside", pointer: "7ae0", sceneID: "0101", modelAPointer: "c764", modelBPointer: "c7a4" },
+	  { name: "GI - Train Station", pointer: "7ae4", sceneID: "0102", modelAPointer: "c77c", modelBPointer: "c7b8" },
+	  { name: "GI - workers quarters", pointer: "7ae8", sceneID: "0103", modelAPointer: "c790", modelBPointer: "c7dc" },
+	  { name: "GI - trash compactor", pointer: "7aec", sceneID: "0104", modelAPointer: "c780", modelBPointer: "0" },
+	  { name: "GI - elevator shaft", pointer: "7af0", sceneID: "0105", modelAPointer: "c774", modelBPointer: "0" },
+	  { name: "GI - floor 2", pointer: "7af4", sceneID: "0106", modelAPointer: "c768", modelBPointer: "c7c4" },
+	  { name: "GI - floor 2 (electromagnet chamber)", pointer: "7af8", sceneID: "0107", modelAPointer: "c788", modelBPointer: "0" },
+	  { name: "GI - floor 3", pointer: "7afc", sceneID: "0108", modelAPointer: "c768", modelBPointer: "c7c8" },
+	  { name: "GI - floor 3 (boiler plant)", pointer: "7b00", sceneID: "0109", modelAPointer: "c784", modelBPointer: "c7d8" },
+	  { name: "GI - floor 3 (packing room)", pointer: "7b04", sceneID: "010A", modelAPointer: "c7b0", modelBPointer: "0" },
+	  { name: "GI - floor 4", pointer: "7b08", sceneID: "010B", modelAPointer: "c770", modelBPointer: "c7cc" },
+	  { name: "GI - floor 4 (cable room)", pointer: "7b0c", sceneID: "010C", modelAPointer: "c794", modelBPointer: "c798" },
+	  { name: "GI - floor 4 (quality control)", pointer: "7b10", sceneID: "010D", modelAPointer: "c79c", modelBPointer: "c7ac" },
+	  { name: "GI - floor 5", pointer: "7b14", sceneID: "010E", modelAPointer: "", modelBPointer: "" },
+	  { name: "GI - basement", pointer: "7b18", sceneID: "010F", modelAPointer: "c778", modelBPointer: "c7d4" },
+	  { name: "GI - basement (repair depot)", pointer: "7b1c", sceneID: "0110", modelAPointer: "c7b4", modelBPointer: "0" },
+	  { name: "GI - basement (waste disposal)", pointer: "7b20", sceneID: "0111", modelAPointer: "c78c", modelBPointer: "c7a0" },
+	  { name: "GI - Floor 4 - Clinker's Cavern", pointer: "7c64", sceneID: "0162", modelAPointer: "c7bc", modelBPointer: "0" },
+	  { name: "GI - Humba's Wigwam", pointer: "7b58", sceneID: "011F", modelAPointer: "", modelBPointer: "" },
+	  { name: "GI - water supply pipe", pointer: "7b70", sceneID: "0125", modelAPointer: "", modelBPointer: "" },
+	  { name: "GI - Mumbo's Skull", pointer: "7ca4", sceneID: "0172", modelAPointer: "", modelBPointer: "" },
+	  { name: "GI - Floor 4 (Sewer Entrance)", pointer: "7cf8", sceneID: "0187", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - lava side", pointer: "7b78", sceneID: "0127", modelAPointer: "c7ec", modelBPointer: "c7f0" },
+	  { name: "HP - icy side", pointer: "7b7c", sceneID: "0128", modelAPointer: "c7f4", modelBPointer: "c7f8" },
+	  { name: "HP - lava train station", pointer: "7b80", sceneID: "0129", modelAPointer: "c808", modelBPointer: "" },
+	  { name: "HP - ice train station", pointer: "7b84", sceneID: "012A", modelAPointer: "c800", modelBPointer: "c804" },
+	  { name: "HP - chilli billi", pointer: "7b88", sceneID: "012B", modelAPointer: "c81c", modelBPointer: "c82c" },
+	  { name: "HP - chilly willy", pointer: "7b8c", sceneID: "012C", modelAPointer: "c820", modelBPointer: "c830" },
+	  { name: "HP - colosseum kickball stadium lobby", pointer: "7b90", sceneID: "012D", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - colosseum kickball stadium - Quarterfinal", pointer: "7b94", sceneID: "012E", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - colosseum kickball stadium - Semifinal", pointer: "7b98", sceneID: "012F", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - colosseum kickball stadium - Final", pointer: "7b9c", sceneID: "0130", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - boggy's igloo", pointer: "7ba0", sceneID: "0131", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - icicle grotto", pointer: "7ba4", sceneID: "0132", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - inside the volcano", pointer: "7ba8", sceneID: "0133", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - Mumbo's Skull", pointer: "7bac", sceneID: "0134", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - humba's wigwam", pointer: "7bb0", sceneID: "0135", modelAPointer: "", modelBPointer: "" },
+	  { name: "CCL", pointer: "7c60", sceneID: "0161", modelAPointer: "c834", modelBPointer: "c854" },
+	  { name: "CCL - Cloud Cuckoo Land", pointer: "7bb4", sceneID: "0136", modelAPointer: "c834", modelBPointer: "c854" },
+	  { name: "CCL - inside the trashcan", pointer: "7bb8", sceneID: "0137", modelAPointer: "c84c", modelBPointer: "c850" },
+	  { name: "CCL - inside the cheesewedge", pointer: "7bbc", sceneID: "0138", modelAPointer: "c848", modelBPointer: "c860" },
+	  { name: "CCL - central cavern", pointer: "7bc4", sceneID: "013A", modelAPointer: "c838", modelBPointer: "c858" },
+	  { name: "CCL - inside the pot o gold", pointer: "7bd0", sceneID: "013D", modelAPointer: "c83c", modelBPointer: "c840" },
+	  { name: "CCL - mumbo's skull", pointer: "7bd4", sceneID: "013E", modelAPointer: "", modelBPointer: "" },
+	  { name: "CCL - mingy jongo's skull", pointer: "7bd8", sceneID: "013F", modelAPointer: "", modelBPointer: "" },
+	  { name: "CCL - humba wumba's wigwam", pointer: "7bdc", sceneID: "0140", modelAPointer: "", modelBPointer: "" },
+	  { name: "CK - Cauldron Keep", pointer: "7c50", sceneID: "015D", modelAPointer: "c86c", modelBPointer: "c870" },
+	  { name: "CK - Gatehouse", pointer: "7c54", sceneID: "015E", modelAPointer: "c878", modelBPointer: "72e4" },
+	  { name: "CK - Quiz", pointer: "7c58", sceneID: "015F", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CK - Gun Chamber", pointer: "7c5c", sceneID: "0160", modelAPointer: "c874", modelBPointer: "" },
+	  { name: "CK - Gun Room Still", pointer: "7c84", sceneID: "016A", modelAPointer: "", modelBPointer: "" },
+	  { name: "CK", pointer: "7d44", sceneID: "019A", modelAPointer: "", modelBPointer: "" },
+	  { name: "MT - Multi", pointer: "7c74", sceneID: "0166", modelAPointer: "", modelBPointer: "" },
+	  { name: "MT - still", pointer: "7c78", sceneID: "0167", modelAPointer: "", modelBPointer: "" },
+	  { name: "HP - Icy side still", pointer: "7c7c", sceneID: "0168", modelAPointer: "", modelBPointer: "" },
+	  { name: "Bottles house still", pointer: "7c80", sceneID: "0169", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM", pointer: "7c98", sceneID: "016F", modelAPointer: "", modelBPointer: "" },
+	  { name: "GGM", pointer: "7c9c", sceneID: "0170", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Balloons", pointer: "7cc8", sceneID: "017B", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Hoops", pointer: "7ccc", sceneID: "017C", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Packing Game", pointer: "7cd0", sceneID: "017D", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Kickball Arena", pointer: "7cd8", sceneID: "017F", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Kickball Arena 2", pointer: "7cdc", sceneID: "0180", modelAPointer: "", modelBPointer: "" },
+	  { name: "TL - chompa's belly multi", pointer: "7ce8", sceneID: "0183", modelAPointer: "", modelBPointer: "" },
+	  { name: "Beta green pipe", pointer: "7cec", sceneID: "0184", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Trash Can", pointer: "7cf0", sceneID: "0185", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Dodgems", pointer: "7cf4", sceneID: "0186", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Bee Hive", pointer: "7cfc", sceneID: "0188", modelAPointer: "", modelBPointer: "" },
+	  { name: "MP - Quiz Game", pointer: "7d00", sceneID: "0189", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Game select screen", pointer: "7c3c", sceneID: "0158", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Opening cut scene", pointer: "7c40", sceneID: "0159", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Intro", pointer: "7d08", sceneID: "018B", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Sisters explain BOB", pointer: "7d0c", sceneID: "018C", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - About to Blast Jingaling", pointer: "7d18", sceneID: "018F", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Getting Zapped", pointer: "7d1c", sceneID: "0190", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Zombiefied Throne Room", pointer: "7cd4", sceneID: "017E", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Gained energy from Jingaling", pointer: "7d10", sceneID: "018D", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Party Ended", pointer: "7d20", sceneID: "0191", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Bottles gets home", pointer: "7d24", sceneID: "0192", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Bottles is brought back to life!", pointer: "7d28", sceneID: "0193", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - B and K About to use BOB", pointer: "7d2c", sceneID: "0194", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Lets fix Bottles Next", pointer: "7d30", sceneID: "0195", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Playing with Gruntys Head", pointer: "7d34", sceneID: "0196", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Giving Jingaliong back life", pointer: "7d38", sceneID: "0197", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Jingalings Temple gets back life", pointer: "7d3c", sceneID: "0198", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Jingaling Celebrates that hes back", pointer: "7d40", sceneID: "0199", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Credits", pointer: "7d4c", sceneID: "019C", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Character Parade", pointer: "7d50", sceneID: "019D", modelAPointer: "", modelBPointer: "" },
+	  { name: "CS - Two Years have Passed", pointer: "7960", sceneID: "A1", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - Drill Starts", pointer: "7964", sceneID: "A2", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - Drill goes through Boulders", pointer: "7968", sceneID: "A3", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - Use Magic to Lift Boulder", pointer: "796c", sceneID: "A4", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - Revenge is Mine!", pointer: "7970", sceneID: "A5", modelAPointer: "10510", modelBPointer: "0" },
+	  { name: "CS - Witches Leave Spiral Mountain", pointer: "7974", sceneID: "A6", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - House Destoryed", pointer: "7978", sceneID: "A7", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - Playing Poker", pointer: "797c", sceneID: "A8", modelAPointer: "0", modelBPointer: "10518" },
+	  { name: "CS - Earthquake!", pointer: "7980", sceneID: "A9", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - It Stopped", pointer: "7984", sceneID: "AA", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - Get out of the House!", pointer: "7988", sceneID: "AB", modelAPointer: "0", modelBPointer: "0" },
+	  { name: "CS - Come on!", pointer: "798c", sceneID: "AC", modelAPointer: "0", modelBPointer: "0" },
+	];
+	
+	const mapDropdown = document.getElementById("mapDropdown");
+
+	// Populate mapDropdown
+	BK_Maps.forEach(map => {
+		const option = document.createElement("option");
+		option.value = map.name; // This will be the value when selected
+		option.textContent = map.name; // This is what’s shown to the user
+		mapDropdown.appendChild(option);
+	});
+    
+    import * as THREE from 'three';
+    import { PointerLockControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/PointerLockControls.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js';
+
+    const canvas = document.getElementById('gl');
+    const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+    renderer.setPixelRatio(window.devicePixelRatio);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1220);
+
+    const camera = new THREE.PerspectiveCamera(60,2,0.1,100000);
+    camera.position.set(0,100,400);
+
+    // Create pointer-lock controls which will request pointer lock on the canvas element
+    const pointerControls = new PointerLockControls(camera, renderer.domElement);
+    let orbitControls = null; // lazy-created when needed
+
+    // State regarding which control mode is active
+    let controlMode = 'pointer'; // 'auto' | 'pointer' | 'orbit'
+    let pointerLockBlocked = false; // whether requestPointerLock is blocked (sandboxed iframe)
+	
+	let game = 'BK';
+	
+    // Light
+    const hemi = new THREE.HemisphereLight(0xaaaaee,0xaaaaee,0.8); // 0x9696fa
+    scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff,0.7);
+    dir.position.set(100,200,100);
+    scene.add(dir);
+
+    // Default geometry holders
+    let mesh = null;
+    let edges = null;
+
+    // Material
+    const material = new THREE.MeshStandardMaterial({color:0x3aa6ff,side:THREE.FrontSide,transparent:true,opacity:1.0});
+
+    // Raycaster for selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    // Movement state (applies only in pointer-lock / fly mode)
+    const move = {forward:false,back:false,left:false,right:false,up:false,down:false};
+    const speed = 5000; // units per second
+
+    // UI elements
+    const fileInput = document.getElementById('file');
+    const loadMapButton = document.getElementById('loadMap');
+    const wireframeCheckbox = document.getElementById('wireframe');
+    const gridCheckbox = document.getElementById('grid');
+    const translucentCheckbox = document.getElementById('translucent');
+    const opacitySlider = document.getElementById('opacity');
+    const backfaceCheckbox = document.getElementById('backface');
+    const camPosEl = document.getElementById('cam-pos');
+    const camRotEl = document.getElementById('cam-rot');
+    const selIndexEl = document.getElementById('sel-index');
+    const selVertsEl = document.getElementById('sel-verts');
+    /*const downloadTextLink = document.getElementById('download-sample-text');
+    const downloadBinLink = document.getElementById('download-sample-bin');
+    const downloadLargeLink = document.getElementById('download-sample-large');*/
+    const statusEl = document.getElementById('status');
+    const controlModeSel = document.getElementById('control-mode');
+    const gameSel = document.getElementById('selected-game');
+
+    function setStatus(msg, level='info'){
+      statusEl.textContent = `Status: ${msg}`;
+      if(level==='warn') statusEl.style.background = '#40230b';
+      else if(level==='error') statusEl.style.background = '#4b0b0b';
+      else statusEl.style.background = '#221a11';
+    }
+
+    function setMaterialProps(){
+      material.transparent = translucentCheckbox.checked;
+      material.opacity = parseFloat(opacitySlider.value);
+      material.side = backfaceCheckbox.checked ? THREE.DoubleSide : THREE.FrontSide;
+      material.needsUpdate = true;
+    }
+	
+    // Grid helper
+    const grid = new THREE.GridHelper(8000,80,'#1c2a3a','#0f1720');
+    grid.material.opacity = 0.25; grid.material.transparent = true;
+	grid.visible = gridCheckbox.checked;
+    scene.add(grid);
+
+    translucentCheckbox.addEventListener('change', setMaterialProps);
+    opacitySlider.addEventListener('input', setMaterialProps);
+    backfaceCheckbox.addEventListener('change', setMaterialProps);
+
+    wireframeCheckbox.addEventListener('change', ()=>{
+      if(edges) edges.visible = wireframeCheckbox.checked;
+    });
+	
+	gridCheckbox.addEventListener('change', ()=>{
+      if(grid) grid.visible = gridCheckbox.checked;
+    });
+
+    // File parsing
+    fileInput.addEventListener('change', async (ev)=>{
+      const f = ev.target.files[0];
+      if(!f) return;
+      const buf = await f.arrayBuffer();
+      parseModel(buf);
+    });
+	
+	// Load selected map
+	// Function to look up modelAPointer by name
+	function getModelAPointer(game, mapName) {
+		if (game == "BK"){
+			const found = BK_Maps.find(map => map.name === mapName);
+			return found ? found.modelAPointer : null;
+		}
+		else if (game == "BT"){
+			const found = BT_Maps.find(map => map.name === mapName);
+			return found ? found.modelAPointer : null;
+		}
+		else
+			return null
+	}
+	
+    loadMap.addEventListener('click',(e)=>{
+		const game = document.getElementById("selected-game").value;
+		const mapName = document.getElementById("mapDropdown").value;
+		let mapFilename = getModelAPointer(game, mapName);
+		
+		fetch('./' + game + '/' + mapFilename)
+		  .then(res => res.arrayBuffer())
+		  .then(buffer => {
+			console.log("Binary file length:", buffer.byteLength);
+			parseBKModelBinary(buffer); // pass ArrayBuffer directly
+		  })
+		  .catch(err => console.error(err));
+	})
+
+    // Detect binary vs text simple heuristic
+    function parseModel(buffer){
+      if(typeof buffer === 'string') { parseModelText(buffer); return; }
+      const uint8 = new Uint8Array(buffer);
+      let isText = true;
+      for(let i=0;i<Math.min(64,uint8.length);i++){
+        const c = uint8[i];
+        if(c===9||c===10||c===13) continue;
+        if(c<32 || c>126){ isText=false; break; }
+      }
+      if(isText) parseModelText(new TextDecoder().decode(buffer));
+      else {
+		if(game == "BK" || game == "BT")
+			parseBKModelBinary(buffer);
+		else
+			parseModelBinary(buffer);
+	  }
+    }
+
+    // Text format: lines with "v x y z" and "f i j k" (1-based or 0-based)
+    function parseModelText(text){
+      const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s&&s[0]!="#");
+      const verts = [];
+      const tris = [];
+      for(const l of lines){
+        const parts = l.split(/\s+/);
+        if(parts[0].toLowerCase()==='v' && parts.length>=4){
+          verts.push( [parseInt(parts[1],10),parseInt(parts[2],10),parseInt(parts[3],10)] );
+        } else if((parts[0].toLowerCase()==='f'||parts[0].toLowerCase()==='t') && parts.length>=4){
+          const a = parseInt(parts[1],10);
+          const b = parseInt(parts[2],10);
+          const c = parseInt(parts[3],10);
+          tris.push([a,b,c]);
+        }
+      }
+      if(verts.length>0 && tris.length>0){
+        const allIdx = [].concat(...tris);
+        const maxIdx = Math.max(...allIdx);
+        const minIdx = Math.min(...allIdx);
+        if(minIdx>=1 && maxIdx<=verts.length) {
+          for(let i=0;i<tris.length;i++) tris[i]=tris[i].map(x=>x-1);
+        }
+      }
+      buildGeometry(verts,tris);
+    }
+
+    // Binary format: [uint16 vertexCount][uint16 triCount] then vertexCount*(int16 x,y,z) then triCount*(uint16 a,b,c)
+    function parseModelBinary(buffer){
+      const dv = new DataView(buffer);
+      if(dv.byteLength<4){ alert('binary too small'); return; }
+      let offset = 0;
+      const vertexCount = dv.getUint16(offset,true); offset+=2;
+      const triCount = dv.getUint16(offset,true); offset+=2;
+      const verts = [];
+      for(let i=0;i<vertexCount;i++){
+        if(offset+6>dv.byteLength) break;
+        const x = dv.getInt16(offset,true); offset+=2;
+        const y = dv.getInt16(offset,true); offset+=2;
+        const z = dv.getInt16(offset,true); offset+=2;
+        verts.push([x,y,z]);
+      }
+	  console.log(verts)
+      const tris = [];
+      for(let i=0;i<triCount;i++){
+        if(offset+6>dv.byteLength) break;
+        const a = dv.getUint16(offset,true); offset+=2;
+        const b = dv.getUint16(offset,true); offset+=2;
+        const c = dv.getUint16(offset,true); offset+=2;
+        tris.push([a,b,c]);
+      }
+	  console.log(tris)
+      const allIdx = [].concat(...tris);
+      const maxIdx = Math.max(...allIdx);
+      const minIdx = Math.min(...allIdx);
+      if(minIdx>=1 && maxIdx<=verts.length) {
+        for(let i=0;i<tris.length;i++) tris[i]=tris[i].map(x=>x-1);
+      }
+      buildGeometry(verts,tris);
+    }
+	
+	function parseBKModelBinary(buffer){
+      const dv = new DataView(buffer);
+      if(dv.byteLength<4){ alert('binary too small'); return; }
+      let offset = 0;
+	  
+	  let vtx_list_offset = dv.getUint32(0x10,false);
+	  //console.log("vtx_list_offset is "+vtx_list_offset.toString(16))
+      const vertexCount = dv.getInt16(vtx_list_offset+0x14,false); offset+=2;
+	  //console.log("vertexCount is "+vertexCount.toString(16))
+	  
+	  offset = vtx_list_offset + 0x18;
+	  
+      const verts = [];
+      for(let i=0;i<vertexCount;i++){
+        if(offset+0x10>dv.byteLength) break;
+        const x = dv.getInt16(offset,false); offset+=2;
+        const y = dv.getInt16(offset,false); offset+=2;
+        const z = dv.getInt16(offset,false); offset+=2;
+		offset+=10;
+        verts.push([x,y,z]);
+      }
+	  
+	  //console.log(verts);
+	  
+	  let collision_list_offset = dv.getUint32(0x1C,false);
+	  //console.log("collision_list_offset is "+collision_list_offset.toString(16))
+	  const geoCount = dv.getInt16(collision_list_offset+0x10,false);
+	  //console.log("geoCount is "+geoCount.toString(16))
+	  const triCount = dv.getInt16(collision_list_offset+0x14,false);
+	  //console.log("triCount is "+triCount.toString(16))
+      
+	  
+	  offset = collision_list_offset + 0x18 + geoCount * 4;
+	  //console.log("startTriList is "+offset.toString(16))
+      const tris = [];
+      for(let i=0;i<triCount;i++){
+        if(offset+0xC>dv.byteLength) break;
+        const a = dv.getInt16(offset,false)+1; offset+=2;
+        const b = dv.getInt16(offset,false)+1; offset+=2;
+        const c = dv.getInt16(offset,false)+1; offset+=2;
+		offset+=6;
+        tris.push([a,b,c]);
+      }
+	  
+	  //console.log(tris);
+	  
+      const allIdx = [].concat(...tris);
+      const maxIdx = Math.max(...allIdx);
+      const minIdx = Math.min(...allIdx);
+      if(minIdx>=1 && maxIdx<=verts.length) {
+        for(let i=0;i<tris.length;i++) tris[i]=tris[i].map(x=>x-1);
+      }
+      buildGeometry(verts,tris);
+	}
+
+    function buildGeometry(verts,tris){
+      if(!verts || !tris || verts.length===0 || tris.length===0){ alert('No valid vertices or triangles found'); return; }
+      const positions = new Float32Array(verts.length*3);
+      for(let i=0;i<verts.length;i++){ positions[3*i]=verts[i][0]; positions[3*i+1]=verts[i][1]; positions[3*i+2]=verts[i][2]; }
+      const indices = new (verts.length>65535?Uint32Array:Uint16Array)(tris.length*3);
+      for(let i=0;i<tris.length;i++){ indices[3*i]=tris[i][0]; indices[3*i+1]=tris[i][1]; indices[3*i+2]=tris[i][2]; }
+
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions,3));
+      geom.setIndex(new THREE.BufferAttribute(indices,1));
+      //geom.computeVertexNormals();
+      material.flatShading = true;
+	  
+      if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); mesh=null; }
+      if(edges){ scene.remove(edges); edges.geometry.dispose(); edges=null; }
+	  
+	  // Remove any previous selection marker
+	  clearSelection();
+	  
+      mesh = new THREE.Mesh(geom, material);
+		mesh.material.polygonOffset = true;
+		mesh.material.polygonOffsetFactor = 1;   // Push back
+		mesh.material.polygonOffsetUnits = 1;    // In depth units
+      scene.add(mesh);
+
+      // Create geometry for *all* edges (even if shared and coplanar)
+		const edgePositions = [];
+		for (let i = 0; i < indices.length; i += 3) {
+			const a = indices[i], b = indices[i+1], c = indices[i+2];
+			const va = verts[a], vb = verts[b], vc = verts[c];
+			edgePositions.push(
+				va[0], va[1], va[2], vb[0], vb[1], vb[2],
+				vb[0], vb[1], vb[2], vc[0], vc[1], vc[2],
+				vc[0], vc[1], vc[2], va[0], va[1], va[2]
+			);
+		}
+
+		const edgeGeom = new THREE.BufferGeometry();
+		edgeGeom.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+		edges = new THREE.LineSegments(
+			edgeGeom,
+			new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1, opacity: 0.8, transparent: true })
+		);
+      edges.visible = wireframeCheckbox.checked;
+      scene.add(edges);
+
+      const box = new THREE.Box3().setFromBufferAttribute(geom.attributes.position);
+      const sizeVec = new THREE.Vector3();
+      box.getSize(sizeVec);
+      const center = box.getCenter(new THREE.Vector3());
+      const fitDist = Math.max(200, sizeVec.length()*0.8);
+      //camera.position.copy(center).add(new THREE.Vector3(0, fitDist, fitDist*1.2));
+      camera.position.copy(center)
+      pointerControls.getObject().position.copy(camera.position);
+
+      selectedTriangle = null;
+      updateSelectionUI();
+    }
+
+    // Selection
+    let selectedTriangle = null;
+    function updateSelectionUI(){
+      if(selectedTriangle==null){ selIndexEl.textContent='none'; selVertsEl.textContent='none'; return; }
+      selIndexEl.textContent = selectedTriangle.index;
+      const pts = selectedTriangle.verts.map(v=>`${v.x.toFixed(0)} ${v.y.toFixed(0)} ${v.z.toFixed(0)}`);
+      selVertsEl.textContent = pts.join(' ');
+    }
+	
+	// Clear selection
+	function clearSelection() {
+		const prevSel = scene.getObjectByName('selectionMarker');
+		if (prevSel) scene.remove(prevSel);
+		selectedTriangle = null;
+	}
+
+    // Combined canvas click handler: will attempt pointer lock (in pointer mode) or perform selection (if locked or in orbit mode)
+    function performSelection(ev) {
+	  if (!mesh) return;
+
+	  if (document.pointerLockElement === renderer.domElement) {
+		// Pointer lock mode → always cast from center
+		mouse.x = 0;
+		mouse.y = 0;
+	  } else {
+		// Orbit / normal mode → use real mouse position
+		const rect = renderer.domElement.getBoundingClientRect();
+		const x = ev.clientX - rect.left;
+		const y = ev.clientY - rect.top;
+		mouse.x = (x / rect.width) * 2 - 1;
+		mouse.y = - (y / rect.height) * 2 + 1;
+	  }
+
+	  raycaster.setFromCamera(mouse, camera);
+	  const inter = raycaster.intersectObject(mesh);
+	  if (inter.length === 0) {
+		clearSelection();
+		updateSelectionUI();
+		return;
+	  }
+
+	  const hit = inter[0];
+	  const face = hit.face;
+	  const geom = mesh.geometry;
+	  const pos = geom.attributes.position;
+	  const a = face.a, b = face.b, c = face.c;
+	  const va = new THREE.Vector3().fromBufferAttribute(pos,a);
+	  const vb = new THREE.Vector3().fromBufferAttribute(pos,b);
+	  const vc = new THREE.Vector3().fromBufferAttribute(pos,c);
+	  selectedTriangle = { index: Math.floor(hit.faceIndex), verts:[va,vb,vc] };
+
+	  const prev = scene.getObjectByName('selectionMarker');
+	  if (prev) scene.remove(prev);
+
+	  const selGeom = new THREE.BufferGeometry();
+	  const arr = new Float32Array([
+		va.x,va.y,va.z,
+		vb.x,vb.y,vb.z,
+		vc.x,vc.y,vc.z
+	  ]);
+	  selGeom.setAttribute('position', new THREE.BufferAttribute(arr,3));
+	  selGeom.setIndex([0,1,2]);
+	// original commented out. it had a bug where it wouldn't display the yellow selected triangle at very steep angles
+	//const selMat = new THREE.MeshBasicMaterial({
+	//	color:0xffff66,
+	//	side:THREE.DoubleSide,
+	//	transparent:true,
+	//	opacity:1.0
+	//});
+	  const selMat = new THREE.MeshBasicMaterial({
+		color: 0xffff66,
+		side: THREE.DoubleSide,
+		transparent: true,
+		opacity: 1.0,
+		polygonOffset: true,
+		polygonOffsetFactor: -1, // negative pulls toward the camera
+		polygonOffsetUnits: -1
+	  });
+	  const selMesh = new THREE.Mesh(selGeom, selMat);
+	  selMesh.name = 'selectionMarker';
+	  scene.add(selMesh);
+
+	  updateSelectionUI();
+	}
+
+    renderer.domElement.addEventListener('click', (ev)=>{
+      // If user explicitly selected Orbit mode, always treat click as selection (no pointer lock)
+      if(controlMode === 'orbit'){
+        performSelection(ev);
+        return;
+      }
+
+      // If pointer already locked on our canvas, treat click as selection
+      if(document.pointerLockElement === renderer.domElement){
+        performSelection(ev);
+        return;
+      }
+
+      // If user chose Pointer mode or Auto, try to acquire pointer lock on canvas
+      if(controlMode === 'pointer' /*|| controlMode === 'auto'*/){
+        try{
+          // Attempt to lock; this may throw in sandboxed frames.
+          pointerControls.lock();
+          setStatus('requesting pointer lock...');
+        }catch(err){
+          // SecurityError when iframe sandbox blocks pointer lock
+          console.warn('Pointer lock request failed:', err);
+          pointerLockBlocked = true;
+          //setStatus('Pointer lock blocked (sandbox or permission). Falling back to orbit controls.', 'warn');
+          //enableOrbitControls();
+        }
+      }
+    });
+
+    // Listen for pointerlockchange/pointerlockerror to update status
+    document.addEventListener('pointerlockchange', ()=>{
+      if(document.pointerLockElement === renderer.domElement){
+        setStatus('Pointer locked. WASD to fly. Click again to select triangles. Press Esc to unlock.');
+      } else {
+        setStatus('Pointer unlocked.');
+      }
+    });
+    document.addEventListener('pointerlockerror', (ev)=>{
+      console.warn('pointerlockerror', ev);
+      pointerLockBlocked = true;
+      //setStatus('Pointer lock error — falling back to orbit controls.', 'error');
+      //enableOrbitControls();
+    });
+
+    // Control mode selector
+    controlModeSel.addEventListener('change',(e)=>{
+      controlMode = e.target.value;
+      if(controlMode === 'orbit'){
+        enableOrbitControls();
+      }else if(controlMode === 'pointer'){
+        // try to exit orbit and enable pointer behavior
+        disableOrbitControls();
+        setStatus('Pointer mode selected. Click the canvas to request pointer lock.');
+      }else{ // auto
+        if(pointerLockBlocked){
+          enableOrbitControls();
+        } else {
+          disableOrbitControls();
+          setStatus('Auto mode: click canvas to request pointer lock.');
+        }
+      }
+    });
+	
+	// Game selector
+    gameSel.addEventListener('change',(e)=>{
+      game = e.target.value;
+	  mapDropdown.options.length = 0;
+	  
+	  if(game == "BK") {
+		  BK_Maps.forEach(map => {
+			const option = document.createElement("option");
+			option.value = map.name; // This will be the value when selected
+			option.textContent = map.name; // This is what’s shown to the user
+			mapDropdown.appendChild(option);
+		  });
+	  }
+	  else if(game == "BT") {
+		  BT_Maps.forEach(map => {
+			const option = document.createElement("option");
+			option.value = map.name; // This will be the value when selected
+			option.textContent = map.name; // This is what’s shown to the user
+			mapDropdown.appendChild(option);
+		  });
+	  }
+    });
+	
+    function enableOrbitControls(){
+      if(orbitControls) return;
+      try{
+        if(document.pointerLockElement === renderer.domElement) document.exitPointerLock?.();
+      }catch(e){ console.warn('exitPointerLock failed', e); }
+      orbitControls = new OrbitControls(camera, renderer.domElement);
+      orbitControls.enableDamping = true;
+      orbitControls.dampingFactor = 0.08;
+      orbitControls.screenSpacePanning = false;
+      orbitControls.enablePan = true;
+	  
+	  // Hide crosshair in orbit mode
+	  if (crosshair) crosshair.style.display = 'none';
+	  if (hint) hint.style.display = 'none';
+      
+	  setStatus('Orbit controls active (drag to rotate, scroll to zoom).');
+    }
+    function disableOrbitControls(){
+      if(!orbitControls) return;
+      orbitControls.dispose();
+      orbitControls = null;
+	  
+	  // Show crosshair in fly mode
+	  if (crosshair) crosshair.style.display = 'block';
+	  if (hint) hint.style.display = 'block';
+	  
+      setStatus('Orbit controls disabled.');
+    }
+
+    // Movement keyboard (only affects pointer-lock / fly mode)
+    document.addEventListener('keydown',(e)=>{
+      if(e.code==='KeyW') move.forward=true;
+      if(e.code==='KeyS') move.back=true;
+      if(e.code==='KeyA') move.left=true;
+      if(e.code==='KeyD') move.right=true;
+      if(e.code==='Space') move.up=true;
+      if(e.code==='KeyC') move.down=true;
+    });
+    document.addEventListener('keyup',(e)=>{
+      if(e.code==='KeyW') move.forward=false;
+      if(e.code==='KeyS') move.back=false;
+      if(e.code==='KeyA') move.left=false;
+      if(e.code==='KeyD') move.right=false;
+      if(e.code==='Space') move.up=false;
+      if(e.code==='KeyC') move.down=false;
+    });
+
+    // Resize
+    function onWindowResize(){
+      const w = renderer.domElement.clientWidth || window.innerWidth - 320;
+      const h = renderer.domElement.clientHeight || window.innerHeight;
+      if(h===0 || w===0) return;
+      camera.aspect = w/h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w,h,false);
+    }
+    window.addEventListener('resize', onWindowResize);
+
+    // Animation loop
+    let last = performance.now();
+    function animate(){
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min(0.05,(now-last)/1000);
+      last = now;
+	  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+
+      if(controlMode !== 'orbit' && document.pointerLockElement === renderer.domElement){
+        // Apply WASD movement in pointer-lock mode
+        const dir = new THREE.Vector3();
+        if(move.forward) dir.z -= 1;
+        if(move.back) dir.z += 1;
+        if(move.left) dir.x -= 1;
+        if(move.right) dir.x += 1;
+        if(move.up) dir.y += 1;
+        if(move.down) dir.y -= 1;
+        if(dir.lengthSq()>0){
+          dir.normalize();
+          const worldDir = dir.applyQuaternion(camera.quaternion).multiplyScalar(speed*dt);
+          pointerControls.getObject().position.add(worldDir);
+          camera.position.copy(pointerControls.getObject().position);
+        }
+      }
+
+      // Update UI
+      camPosEl.textContent = `${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)}`;
+      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion);
+      camRotEl.textContent = `${THREE.MathUtils.radToDeg(euler.x).toFixed(1)}, ${THREE.MathUtils.radToDeg(euler.y).toFixed(1)}, ${THREE.MathUtils.radToDeg(euler.z).toFixed(1)}`;
+
+      // Update orbit controls if active
+      if(orbitControls) orbitControls.update();
+
+      // update edges transformation if any
+      if(edges && mesh){ edges.position.copy(mesh.position); edges.rotation.copy(mesh.rotation); }
+
+      renderer.render(scene,camera);
+    }
+    onWindowResize();
+    animate();
+	
+	/*
+    // Sample text model generator (20+ triangles)
+    function makeSampleText(){
+      const verts = [];
+      for(let i=0;i<40;i++){
+        const x = Math.floor((Math.random()*2-1)*1200);
+        const y = Math.floor((Math.random()*2-1)*1200);
+        const z = Math.floor((Math.random()*2-1)*1200);
+        verts.push([x,y,z]);
+      }
+      const lines = [];
+      for(const v of verts) lines.push(`v ${v[0]} ${v[1]} ${v[2]}`);
+      for(let t=0;t<24;t++){
+        const a = Math.floor(Math.random()*verts.length);
+        let b = Math.floor(Math.random()*verts.length);
+        let c = Math.floor(Math.random()*verts.length);
+        if(b===a) b=(b+1)%verts.length;
+        if(c===a||c===b) c=(c+2)%verts.length;
+        lines.push(`f ${a} ${b} ${c}`);
+      }
+      return lines.join('\n');
+    }
+    const sampleText = makeSampleText();
+    downloadTextLink.addEventListener('click',(e)=>{
+      e.preventDefault();
+      const blob = new Blob([sampleText],{type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      downloadTextLink.href = url;
+      downloadTextLink.download = 'sample_model.tri.txt';
+      // Do NOT call downloadTextLink.click() here because that would re-enter this same handler in some browsers.
+      // Instead update href and let the user click if they want. We'll programmatically open in a new tab to keep UX simple.
+      window.open(url, '_blank');
+      setTimeout(()=>{ URL.revokeObjectURL(url); }, 15000);
+    });
+
+    // Large-range sample (tests limits close to ±4000)
+    function makeLargeSampleText(){
+      const verts = [];
+      for(let i=0;i<60;i++){
+        const x = Math.floor((Math.random()*2-1)*3800);
+        const y = Math.floor((Math.random()*2-1)*3800);
+        const z = Math.floor((Math.random()*2-1)*3800);
+        verts.push([x,y,z]);
+      }
+      const lines = [];
+      for(const v of verts) lines.push(`v ${v[0]} ${v[1]} ${v[2]}`);
+      for(let t=0;t<36;t++){
+        const a = Math.floor(Math.random()*verts.length);
+        let b = Math.floor(Math.random()*verts.length);
+        let c = Math.floor(Math.random()*verts.length);
+        if(b===a) b=(b+1)%verts.length;
+        if(c===a||c===b) c=(c+2)%verts.length;
+        lines.push(`f ${a} ${b} ${c}`);
+      }
+      return lines.join('\n');
+    }
+    const sampleLargeText = makeLargeSampleText();
+    downloadLargeLink.addEventListener('click',(e)=>{
+      e.preventDefault();
+      const blob = new Blob([sampleLargeText],{type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      downloadLargeLink.href = url;
+      downloadLargeLink.download = 'sample_model_large.tri.txt';
+      window.open(url, '_blank');
+      setTimeout(()=>{ URL.revokeObjectURL(url); }, 15000);
+    });
+
+    // Binary sample generator — useful as an additional test case
+    function makeSampleBinary(){
+      const verts = [ [0,200,0],[ -200,-200,-200],[200,-200,-200],[200,-200,200],[-200,-200,200] ];
+      const tris = [ [0,1,2],[0,2,3],[0,3,4],[0,4,1],[1,4,3],[1,3,2] ];
+      const vertexCount = verts.length;
+      const triCount = tris.length;
+      const buf = new ArrayBuffer(4 + vertexCount*6 + triCount*6);
+      const dv = new DataView(buf);
+      let off = 0;
+      dv.setUint16(off, vertexCount, true); off += 2;
+      dv.setUint16(off, triCount, true); off += 2;
+      for(const v of verts){ dv.setInt16(off, v[0], true); off+=2; dv.setInt16(off, v[1], true); off+=2; dv.setInt16(off, v[2], true); off+=2; }
+      for(const t of tris){ dv.setUint16(off, t[0], true); off+=2; dv.setUint16(off, t[1], true); off+=2; dv.setUint16(off, t[2], true); off+=2; }
+      return buf;
+    }
+
+    downloadBinLink.addEventListener('click',(e)=>{
+      e.preventDefault();
+      const buf = makeSampleBinary();
+      const blob = new Blob([buf],{type:'application/octet-stream'});
+      const url = URL.createObjectURL(blob);
+      downloadBinLink.href = url;
+      downloadBinLink.download = 'sample_model.tri.bin';
+      window.open(url, '_blank');
+      setTimeout(()=>{ URL.revokeObjectURL(url); }, 15000);
+    });*/
+
+    // initial scene: build a small test cube if user hasn't loaded
+    function buildTest(){
+      const verts = [[-200,-200,-200],[200,-200,-200],[200,200,-200],[-200,200,-200],[-200,-200,200],[200,-200,200],[200,200,200],[-200,200,200]];
+      const tris = [[0,1,2],[0,2,3],[4,7,6],[4,6,5],[0,4,5],[0,5,1],[1,5,6],[1,6,2],[2,6,7],[2,7,3],[3,7,4],[3,4,0]];
+      buildGeometry(verts,tris);
+    }
+    buildTest();
+
+    // expose a tiny helpful function on window for quick testing
+    window.__3dv = { parseModelText, parseModelBinary };
+
+    // Initial status: determine starting mode
+    (function initStatus(){
+      // If the environment is clearly sandboxed (iframe), we cannot reliably request pointer lock.
+      try{
+        // Some browsers throw immediately when calling requestPointerLock in a sandbox; we don't call it here — just detect availability.
+        const supported = 'requestPointerLock' in Element.prototype;
+        if(!supported){ pointerLockBlocked = true; setStatus('Pointer lock not supported in this environment; orbit controls enabled.', 'warn'); enableOrbitControls(); return; }
+        setStatus('Ready. Click canvas to request pointer lock (Auto).');
+      }catch(e){
+        pointerLockBlocked = true;
+        setStatus('Pointer lock appears unavailable; orbit controls enabled.', 'warn');
+        enableOrbitControls();
+      }
+    })();
+
+  </script>
+</body>
+</html>
