@@ -910,7 +910,7 @@
 		meshObj.material.polygonOffsetFactor = 1;
 		meshObj.material.polygonOffsetUnits = 1;
 		if(!clearFirst)
-			meshObj.material.color.set(0x38d7ff);
+			meshObj.material.color.set(0x3aff78);
 		scene.add(meshObj);
 
 		// Build wireframe edges
@@ -979,7 +979,7 @@
 		// Color picker
 		const colorInput = document.createElement('input');
 		colorInput.type = 'color';
-		colorInput.value = clearFirst ? '#3aa6ff' : '#38d7ff';
+		colorInput.value = clearFirst ? '#3aa6ff' : '#3aff78';
 		colorInput.addEventListener('input', () => {
 			if (meshObj.material) {
 				meshObj.material.color.set(colorInput.value);
