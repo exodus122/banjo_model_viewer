@@ -180,7 +180,7 @@
       </div>-->
     </div>
   </div>
-  <script type="text/javascript"  src="object_list.js"></script>
+  <script type="text/javascript"  src="model_list.js"></script>
   <script type="module">
 	
 	const mapDropdown = document.getElementById("mapDropdown");
@@ -200,6 +200,7 @@
     const canvas = document.getElementById('gl');
     const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
     renderer.setPixelRatio(window.devicePixelRatio);
+	renderer.shadowMap.enabled = false;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b1220);
 
@@ -944,7 +945,7 @@
       const now = performance.now();
       const dt = Math.min(0.05,(now-last)/1000);
       last = now;
-	  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+	  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
 
       if(controlMode !== 'orbit' && document.pointerLockElement === renderer.domElement){
         // Apply WASD movement in pointer-lock mode
